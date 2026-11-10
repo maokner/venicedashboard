@@ -1,0 +1,1125 @@
+import React, { useState } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  ReferenceLine,
+} from "recharts";
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  CircleHelp,
+  Layers,
+  PanelLeftClose,
+  Menu,
+  X,
+  Search,
+  Check,
+  Copy,
+  ArrowRight,
+  Radio,
+  BookOpen,
+  Activity,
+  Wallet,
+  Flame,
+  ChartNoAxesCombined,
+} from "lucide-react";
+import {
+  history,
+  latest,
+  compact,
+  pctChange,
+  selectRows,
+  download,
+  walletRows,
+  source,
+  snapshot,
+  staked,
+  type Dataset,
+  type Row,
+} from "./data";
+import "./styles.css";
+const tabs = [
+  "Overview",
+  "Market activity",
+  "Staking & supply",
+  "Holders",
+  "Methodology",
+];
+const peach = "#e7ad79",
+  green = "#8bac91";
+const dateLabel = (s: string) =>
+  new Date(s + "T00:00:00Z").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+function Logo() {
+  return (
+    <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <path
+        d="m6 9 8 23 6-18 6 18 8-23M10 9l10 26L30 9"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+    </svg>
+  );
+}
+function Change({
+  value,
+  label = "vs. 30d ago",
+}: {
+  value: number;
+  label?: string;
+}) {
+  return (
+    <span className={"change " + (value >= 0 ? "positive" : "negative")}>
+      {value >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}{" "}
+      {Math.abs(value).toFixed(1)}% <span>{label}</span>
+    </span>
+  );
+}
+function Chart({
+  dataset,
+  fields,
+  title,
+  subtitle,
+  range,
+  bucket,
+  kind = "area",
+  currency = false,
+}: {
+  dataset: Dataset;
+  fields: { key: string; label: string; color: string }[];
+  title: string;
+  subtitle: string;
+  range: string;
+  bucket: string;
+  kind?: string;
+  currency?: boolean;
+}) {
+  const rows = selectRows(dataset, range, bucket);
+  const common = {
+    data: rows,
+    margin: { top: 15, right: 8, left: 0, bottom: 0 },
+  };
+  const axes = (
+    <>
+      <CartesianGrid vertical={false} stroke="#ffffff0b" />
+      <XAxis
+        dataKey="day"
+        tickFormatter={dateLabel}
+        minTickGap={50}
+        tickLine={false}
+        axisLine={false}
+        tick={{ fill: "#81877f", fontSize: 10 }}
+        dy={12}
+      />
+      <YAxis
+        width={48}
+        tickFormatter={(v) => (currency ? "$" : "") + compact(v, 1)}
+        tickLine={false}
+        axisLine={false}
+        tick={{ fill: "#81877f", fontSize: 10 }}
+        domain={kind === "line" ? ["auto", "auto"] : [0, "auto"]}
+      />
+      <Tooltip
+        labelFormatter={(v) => dateLabel(String(v))}
+        formatter={(v, name) => [
+          (currency ? "$" : "") +
+            Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }),
+          name,
+        ]}
+        contentStyle={{
+          background: "#252924",
+          border: "1px solid #3d423a",
+          borderRadius: 6,
+          fontSize: 12,
+        }}
+        labelStyle={{ color: "#aaa", marginBottom: 8 }}
+        cursor={
+          kind === "bar"
+            ? { fill: "#ffffff05" }
+            : { stroke: "#72786d", strokeDasharray: "3 3" }
+        }
+      />
+    </>
+  );
+  return (
+    <section className="chart-panel">
+      <div className="panel-heading">
+        <div>
+          <h3>{title}</h3>
+          <p>{subtitle}</p>
+        </div>
+        <button
+          className="icon-button"
+          aria-label={"Download " + title}
+          title="Export chart data"
+          onClick={() => download(dataset + "-" + range, rows)}
+        >
+          <Download size={15} />
+        </button>
+      </div>
+      <div
+        className="chart"
+        role="img"
+        aria-label={`${title}. ${rows.length} observations in the selected period. Hover for values.`}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          {kind === "bar" ? (
+            <BarChart {...common}>
+              {axes}
+              <ReferenceLine y={0} stroke="#454b41" />
+              {fields.map((f) => (
+                <Bar
+                  key={f.key}
+                  dataKey={f.key}
+                  name={f.label}
+                  fill={f.color}
+                  maxBarSize={8}
+                  radius={[1, 1, 0, 0]}
+                  isAnimationActive={false}
+                />
+              ))}
+            </BarChart>
+          ) : kind === "line" ? (
+            <LineChart {...common}>
+              {axes}
+              {fields.map((f) => (
+                <Line
+                  key={f.key}
+                  dataKey={f.key}
+                  name={f.label}
+                  stroke={f.color}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              ))}
+            </LineChart>
+          ) : (
+            <AreaChart {...common}>
+              <defs>
+                <linearGradient
+                  id={"fill-" + dataset}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={fields[0].color}
+                    stopOpacity={0.22}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor={fields[0].color}
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+              </defs>
+              {axes}
+              {fields.map((f) => (
+                <Area
+                  key={f.key}
+                  type="monotone"
+                  dataKey={f.key}
+                  name={f.label}
+                  stroke={f.color}
+                  strokeWidth={2}
+                  fill={"url(#fill-" + dataset + ")"}
+                  isAnimationActive={false}
+                />
+              ))}
+            </AreaChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+      <div className="chart-foot">
+        <div className="legend">
+          {fields.map((f) => (
+            <span key={f.key}>
+              <i style={{ background: f.color }} />
+              {f.label}
+            </span>
+          ))}
+        </div>
+        <span>{dataset === "emissions" ? "Weekly" : bucket} · UTC</span>
+      </div>
+    </section>
+  );
+}
+function App() {
+  const [tab, setTab] = useState("Overview"),
+    [range, setRange] = useState("180D"),
+    [bucket, setBucket] = useState("Daily"),
+    [mobile, setMobile] = useState(false),
+    [query, setQuery] = useState(""),
+    [sort, setSort] = useState("vvv_balance"),
+    [asc, setAsc] = useState(false),
+    [page, setPage] = useState(0),
+    [copied, setCopied] = useState(false);
+  const supply = latest("supply", "circulating_supply"),
+    stakeShare = (staked / supply) * 100,
+    burns = latest("supply", "cumulative_burned");
+  const go = (name: string) => {
+    setTab(name);
+    setMobile(false);
+    setPage(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const filtered = walletRows
+    .filter(
+      (w) =>
+        w.address.includes(query.toLowerCase()) ||
+        ("svvv staking contract".includes(query.toLowerCase()) &&
+          w === walletRows[0]),
+    )
+    .sort(
+      (a, b) =>
+        (Number(a[sort as keyof typeof a]) -
+          Number(b[sort as keyof typeof b])) *
+        (asc ? 1 : -1),
+    );
+  const chart = (
+    dataset: Dataset,
+    title: string,
+    subtitle: string,
+    fields: { key: string; label: string; color: string }[],
+    kind = "area",
+    currency = false,
+  ) => (
+    <Chart
+      {...{ dataset, title, subtitle, fields, range, bucket, kind, currency }}
+    />
+  );
+  const priceChart = chart(
+    "price",
+    "VVV price",
+    "Daily median DEX-implied price in USD",
+    [{ key: "vvv_price_usd", label: "VVV / USD", color: peach }],
+    "area",
+    true,
+  );
+  const holdersChart = chart(
+    "holders",
+    "Holder growth",
+    "Addresses with a non-zero VVV balance",
+    [{ key: "holders", label: "Holders", color: green }],
+  );
+  const volumeChart = chart(
+    "volume",
+    "DEX volume",
+    "Unadjusted buy and sell volume in USD",
+    [
+      { key: "buy_volume_usd", label: "Buy volume", color: green },
+      { key: "sell_volume_usd", label: "Sell volume", color: peach },
+    ],
+    "bar",
+    true,
+  );
+  const emissionsChart = chart(
+    "emissions",
+    "Emissions & burns",
+    "Weekly minted and burned VVV, including launch",
+    [
+      { key: "minted", label: "Minted", color: green },
+      { key: "burned", label: "Burned", color: peach },
+    ],
+    "bar",
+  );
+  return (
+    <div className="app">
+      <aside className={"sidebar " + (mobile ? "open" : "")}>
+        <a className="brand" href="/" aria-label="Venice Observatory home">
+          <span className="brand-icon">
+            <Logo />
+          </span>
+          <span>
+            venice<span className="brand-sub">OBSERVATORY</span>
+          </span>
+        </a>
+        <button
+          className="mobile-close icon-button"
+          onClick={() => setMobile(false)}
+          aria-label="Close navigation"
+        >
+          <X size={20} />
+        </button>
+        <div className="workspace-label">RESEARCH WORKSPACE</div>
+        <div className="workspace">
+          <span className="workspace-avatar">V</span>
+          <span>
+            Venice AI<span>Protocol deep dive</span>
+          </span>
+          <Layers size={15} />
+        </div>
+        <div className="nav-label">ANALYSIS</div>
+        <nav>
+          {tabs.map((name, i) => {
+            const Icon = [
+              ChartNoAxesCombined,
+              Activity,
+              Flame,
+              Wallet,
+              BookOpen,
+            ][i];
+            return (
+              <button
+                key={name}
+                className={tab === name ? "active" : ""}
+                onClick={() => go(name)}
+              >
+                <Icon size={17} />
+                {name}
+                {tab === name && <span className="nav-dot" />}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="nav-divider" />
+        <div className="nav-label">ECOSYSTEM</div>
+        <a
+          className="side-link"
+          href="https://venice.ai"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Logo />
+          Venice AI
+          <ArrowUpRight size={14} />
+        </a>
+        <a
+          className="side-link"
+          href="https://basescan.org/token/0xacfe6019ed1a7dc6f7b508c02d1b04ec88cc21bf"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <span className="base-icon" />
+          Base explorer
+          <ArrowUpRight size={14} />
+        </a>
+        <div className="sidebar-bottom">
+          <div className="source-badge">
+            <span className="status-dot" />
+            Allium data snapshot
+          </div>
+          <p>On-chain data. Open research.</p>
+          <a href={source} target="_blank" rel="noreferrer">
+            View original dashboard <ArrowUpRight size={13} />
+          </a>
+          <div className="bottom-wordmark">
+            <Logo />
+            <span>Independent research</span>
+          </div>
+        </div>
+      </aside>
+      {mobile && <div className="scrim" onClick={() => setMobile(false)} />}
+      <div className="main-shell">
+        <header className="topbar">
+          <div>
+            <button
+              className="icon-button menu-toggle"
+              aria-label="Open navigation"
+              onClick={() => setMobile(true)}
+            >
+              <Menu size={19} />
+            </button>
+            <PanelLeftClose className="desktop-only" size={16} />
+            <span className="breadcrumb">AI & crypto</span>
+            <ChevronRight size={12} />
+            <span>Venice AI</span>
+          </div>
+          <div>
+            <span className="network">
+              <i /> Base
+            </span>
+            <span className="top-separator" />
+            <a href={source} target="_blank" rel="noreferrer">
+              Source <ArrowUpRight size={13} />
+            </a>
+          </div>
+        </header>
+        <main>
+          <div className="intro">
+            <div>
+              <div className="eyebrow">
+                <span className="status-dot" /> PROTOCOL DEEP DIVE{" "}
+                <span>/</span> 001
+              </div>
+              <div className="title-line">
+                <h1>Venice AI</h1>
+                <span className="token-badge">VVV</span>
+              </div>
+              <p>
+                The on-chain picture of private AI.
+                <br className="mobile-only" /> Markets, participation, and token
+                economics.
+              </p>
+              <div className="intro-meta">
+                <span className="base-icon" /> Base network <i /> Since Jan 23,
+                2025 <i />
+                <span>Snapshot · Nov 10, 2026</span>
+              </div>
+            </div>
+            <button
+              className="export-button"
+              onClick={() =>
+                download(
+                  "venice-" + snapshot,
+                  history.price.map((r: Row) => ({
+                    ...r,
+                    ...history.holders.find((h) => h.day === r.day),
+                    ...history.supply.find((h) => h.day === r.day),
+                    ...history.volume.find((h) => h.day === r.day),
+                  })),
+                )
+              }
+            >
+              <Download size={14} /> Export data
+            </button>
+          </div>
+          <div className="tabbar" role="tablist" aria-label="Research sections">
+            {tabs.map((name) => (
+              <button
+                role="tab"
+                aria-selected={tab === name}
+                key={name}
+                onClick={() => go(name)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+          {tab !== "Methodology" && (
+            <>
+              <div className="section-tools">
+                <div>
+                  <span className="status-dot" /> Historical snapshot{" "}
+                  <span className="quiet">/ UTC</span>
+                </div>
+                <div className="filters">
+                  <div className="range-filter" aria-label="Date range">
+                    {["30D", "90D", "180D", "ALL"].map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setRange(r)}
+                        className={range === r ? "selected" : ""}
+                      >
+                        {r === "ALL" ? "All time" : r}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="bucket">
+                    <select
+                      aria-label="Chart aggregation"
+                      value={bucket}
+                      onChange={(e) => setBucket(e.target.value)}
+                    >
+                      <option>Daily</option>
+                      <option>Weekly</option>
+                      <option>Monthly</option>
+                    </select>
+                    <ChevronDown size={12} />
+                  </label>
+                </div>
+              </div>
+              <div className="metric-strip">
+                {[
+                  {
+                    label: "VVV price",
+                    value: "$" + latest("price", "vvv_price_usd").toFixed(2),
+                    detail: (
+                      <Change value={pctChange("price", "vvv_price_usd", 30)} />
+                    ),
+                    data: "price",
+                    field: "vvv_price_usd",
+                  },
+                  {
+                    label: "Token holders",
+                    value: compact(latest("holders", "holders")),
+                    detail: (
+                      <Change value={pctChange("holders", "holders", 30)} />
+                    ),
+                    data: "holders",
+                    field: "holders",
+                  },
+                  {
+                    label: "Total staked",
+                    value: compact(staked) + " VVV",
+                    detail: (
+                      <span className="metric-note">
+                        <span className="peach">{stakeShare.toFixed(1)}%</span>{" "}
+                        of outstanding supply
+                      </span>
+                    ),
+                    data: "",
+                    field: "",
+                  },
+                  {
+                    label: "Outstanding supply",
+                    value: compact(supply) + " VVV",
+                    detail: (
+                      <span className="metric-note">
+                        Minted supply minus burns
+                      </span>
+                    ),
+                    data: "supply",
+                    field: "circulating_supply",
+                  },
+                ].map((m) => (
+                  <div className="metric" key={m.label}>
+                    <div className="metric-label">
+                      {m.label}
+                      <CircleHelp size={12}>
+                        <title>
+                          {m.label} at the latest source snapshot, independent
+                          of chart range.
+                        </title>
+                      </CircleHelp>
+                    </div>
+                    <div className="metric-value">{m.value}</div>
+                    {m.detail}
+                    {m.data && (
+                      <div className="sparkline">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={history[m.data as Dataset].slice(-60)}
+                          >
+                            <Line
+                              type="monotone"
+                              dataKey={m.field}
+                              stroke={m.data === "price" ? peach : green}
+                              dot={false}
+                              strokeWidth={1.3}
+                              isAnimationActive={false}
+                            />
+                            <YAxis hide domain={["dataMin", "dataMax"]} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="snapshot-note">
+                Headline metrics show the latest snapshot. Date and aggregation
+                filters apply to charts.
+              </div>
+            </>
+          )}
+          {tab === "Overview" && (
+            <>
+              <div className="section-heading">
+                <div>
+                  <span className="section-number">01</span>
+                  <h2>Market overview</h2>
+                </div>
+                <span>Price & participation</span>
+              </div>
+              <div className="chart-grid">
+                {priceChart}
+                {holdersChart}
+              </div>
+              <div className="research-note">
+                <span className="note-icon">
+                  <Radio size={18} />
+                </span>
+                <div>
+                  <span className="eyebrow">WHAT TO WATCH</span>
+                  <p>Start with staking, then follow the supply.</p>
+                  <span>
+                    {stakeShare.toFixed(1)}% of outstanding VVV is staked.
+                    Compare emissions with burns to see whether token supply is
+                    expanding or contracting.
+                  </span>
+                </div>
+                <button
+                  onClick={() => go("Staking & supply")}
+                  aria-label="Explore staking and supply"
+                >
+                  <ArrowUpRight size={20} />
+                </button>
+              </div>
+              <div className="section-heading">
+                <div>
+                  <span className="section-number">02</span>
+                  <h2>Token economics</h2>
+                </div>
+                <button onClick={() => go("Staking & supply")}>
+                  Explore supply <ArrowRight size={13} />
+                </button>
+              </div>
+              <div className="economics">
+                <div className="staking-summary">
+                  <div className="eyebrow">STAKED SHARE</div>
+                  <div className="large-number">
+                    {stakeShare.toFixed(1)}
+                    <span>%</span>
+                  </div>
+                  <div className="allocation-bar">
+                    <span style={{ width: stakeShare + "%" }} />
+                  </div>
+                  <div className="allocation-labels">
+                    <span>
+                      <i />
+                      {compact(staked)} staked
+                    </span>
+                    <span>{compact(supply - staked)} unstaked</span>
+                  </div>
+                  <p>
+                    sVVV staking total from the source KPI. The holder table
+                    reports a different contract balance.
+                  </p>
+                </div>
+                <div className="supply-summary">
+                  <div>
+                    <span>Cumulative VVV burned</span>
+                    <strong>
+                      {compact(burns)} <small>VVV</small>
+                    </strong>
+                    <Flame size={19} />
+                  </div>
+                  <div>
+                    <span>Net supply since launch</span>
+                    <strong>
+                      {(
+                        (supply / Number(history.supply[0].circulating_supply) -
+                          1) *
+                        100
+                      ).toFixed(2)}
+                      <small>%</small>
+                    </strong>
+                    <ArrowDownRight size={19} />
+                  </div>
+                  <button onClick={() => go("Methodology")}>
+                    How these metrics are calculated <ArrowUpRight size={13} />
+                  </button>
+                </div>
+              </div>
+              <div className="section-heading">
+                <div>
+                  <span className="section-number">03</span>
+                  <h2>Trading activity</h2>
+                </div>
+                <span>Decentralized exchanges</span>
+              </div>
+              <div className="chart-grid">
+                {volumeChart}
+                {chart(
+                  "traders",
+                  "DEX traders",
+                  "Unique trading addresses per day",
+                  [
+                    {
+                      key: "traders",
+                      label:
+                        bucket === "Daily"
+                          ? "Daily traders"
+                          : "Sum of daily traders",
+                      color: green,
+                    },
+                  ],
+                  "bar",
+                )}
+              </div>
+            </>
+          )}
+          {tab === "Market activity" && (
+            <>
+              <div className="section-heading">
+                <div>
+                  <span className="section-number">01</span>
+                  <h2>Price & trading</h2>
+                </div>
+                <span>Unadjusted DEX activity</span>
+              </div>
+              <div className="chart-grid">
+                {priceChart}
+                {volumeChart}
+                {chart(
+                  "traders",
+                  "DEX traders",
+                  "Daily unique addresses. Aggregated periods sum daily counts.",
+                  [
+                    {
+                      key: "traders",
+                      label:
+                        bucket === "Daily" ? "Daily traders" : "Trader-days",
+                      color: green,
+                    },
+                  ],
+                  "bar",
+                )}
+                {chart(
+                  "transfers",
+                  "VVV transfers",
+                  "Token transfer events, including contract activity",
+                  [{ key: "transfers", label: "Transfers", color: peach }],
+                  "bar",
+                )}
+              </div>
+              <div className="inline-note">
+                <CircleHelp size={16} />
+                <p>
+                  DEX volume includes wash trading and MEV. Transfer counts
+                  include contract activity and do not measure unique users.
+                </p>
+              </div>
+            </>
+          )}
+          {tab === "Staking & supply" && (
+            <>
+              <div className="section-heading">
+                <div>
+                  <span className="section-number">01</span>
+                  <h2>Supply dynamics</h2>
+                </div>
+                <span>VVV token units</span>
+              </div>
+              <div className="chart-grid">
+                {chart(
+                  "supply",
+                  "Outstanding supply",
+                  "Cumulative minted VVV minus cumulative burned VVV",
+                  [
+                    {
+                      key: "circulating_supply",
+                      label: "Outstanding VVV",
+                      color: green,
+                    },
+                  ],
+                  "line",
+                )}
+                {chart(
+                  "supply",
+                  "Cumulative burns",
+                  "Total VVV destroyed since launch",
+                  [
+                    {
+                      key: "cumulative_burned",
+                      label: "Burned VVV",
+                      color: peach,
+                    },
+                  ],
+                )}
+                {emissionsChart}
+                <div className="staking-detail">
+                  <span className="eyebrow">STAKING SNAPSHOT</span>
+                  <h2>
+                    {compact(staked)} <span>VVV staked</span>
+                  </h2>
+                  <div className="allocation-bar">
+                    <span style={{ width: stakeShare + "%" }} />
+                  </div>
+                  <p>
+                    {stakeShare.toFixed(1)}% of outstanding supply, using the
+                    source's 32.99M sVVV staking KPI.
+                  </p>
+                  <div className="definition-row">
+                    <span>Staking contract wallet</span>
+                    <strong>{compact(walletRows[0].vvv_balance)} VVV</strong>
+                  </div>
+                  <p className="quiet">
+                    Contract balance and staking KPI differ. They are presented
+                    separately rather than treated as equivalent.
+                  </p>
+                  <a
+                    href={
+                      "https://basescan.org/address/" + walletRows[0].address
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Inspect staking contract <ArrowUpRight size={14} />
+                  </a>
+                </div>
+              </div>
+            </>
+          )}
+          {tab === "Holders" && (
+            <>
+              <div className="section-heading">
+                <div>
+                  <span className="section-number">01</span>
+                  <h2>Holder distribution</h2>
+                </div>
+                <span>Wallets, not unique people</span>
+              </div>
+              <div className="chart-grid">
+                {holdersChart}
+                <div className="staking-detail">
+                  <span className="eyebrow">LARGEST WALLET</span>
+                  <h2>
+                    {(walletRows[0].pct_of_held_supply * 100).toFixed(2)}
+                    <span>% of held supply</span>
+                  </h2>
+                  <p>
+                    The sVVV staking contract is the largest VVV wallet. A
+                    contract can represent many individual stakers.
+                  </p>
+                  <div className="definition-row">
+                    <span>Contract balance</span>
+                    <strong>{compact(walletRows[0].vvv_balance)} VVV</strong>
+                  </div>
+                  <div className="definition-row">
+                    <span>30-day net inflow</span>
+                    <strong className="positive">
+                      +{compact(walletRows[0].net_flow_30d)} VVV
+                    </strong>
+                  </div>
+                </div>
+              </div>
+              <div className="table-head">
+                <div>
+                  <h2>Largest VVV wallets</h2>
+                  <p>
+                    25 wallets captured from the source's top-50 table. Flow
+                    covers 30 days.
+                  </p>
+                </div>
+                <label className="search">
+                  <Search size={14} />
+                  <input
+                    placeholder="Search address..."
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setPage(0);
+                    }}
+                    aria-label="Search wallet address"
+                  />
+                </label>
+                <button
+                  className="icon-button"
+                  aria-label="Export wallets"
+                  onClick={() => download("venice-wallets", filtered)}
+                >
+                  <Download size={16} />
+                </button>
+              </div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Wallet</th>
+                      {[
+                        ["vvv_balance", "VVV balance"],
+                        ["pct_of_held_supply", "Held supply"],
+                        ["net_flow_30d", "Net flow · 30d"],
+                      ].map(([key, label]) => (
+                        <th key={key}>
+                          <button
+                            onClick={() => {
+                              setSort(key);
+                              setAsc(sort === key ? !asc : false);
+                              setPage(0);
+                            }}
+                          >
+                            {label} {sort === key ? (asc ? "↑" : "↓") : "↕"}
+                          </button>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.slice(page * 10, page * 10 + 10).map((w, i) => (
+                      <tr key={w.address}>
+                        <td>{page * 10 + i + 1}</td>
+                        <td>
+                          <a
+                            href={"https://basescan.org/address/" + w.address}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {w.address.slice(0, 8)}...{w.address.slice(-6)}{" "}
+                            <ArrowUpRight size={11} />
+                          </a>
+                          {w.address === walletRows[0].address && (
+                            <span className="contract-label">sVVV staking</span>
+                          )}
+                        </td>
+                        <td>{compact(w.vvv_balance)}</td>
+                        <td>
+                          <div className="pct-cell">
+                            <span
+                              style={{
+                                width:
+                                  Math.max(1, w.pct_of_held_supply * 100) + "%",
+                              }}
+                            />
+                            {(w.pct_of_held_supply * 100).toFixed(2)}%
+                          </div>
+                        </td>
+                        <td
+                          className={
+                            w.net_flow_30d >= 0 ? "positive" : "negative"
+                          }
+                        >
+                          {w.net_flow_30d > 0 ? "+" : ""}
+                          {compact(w.net_flow_30d)}
+                        </td>
+                      </tr>
+                    ))}
+                    {!filtered.length && (
+                      <tr>
+                        <td colSpan={5} className="empty-state">
+                          No wallets match this address.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="pagination">
+                <span>{filtered.length} wallets · Snapshot Nov 10, 2026</span>
+                <div>
+                  <button
+                    disabled={page === 0}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    Previous
+                  </button>
+                  <span>
+                    {page + 1} / {Math.max(1, Math.ceil(filtered.length / 10))}
+                  </span>
+                  <button
+                    disabled={(page + 1) * 10 >= filtered.length}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+          {tab === "Methodology" && (
+            <div className="methodology">
+              <div className="section-heading">
+                <div>
+                  <span className="section-number">01</span>
+                  <h2>Sources & definitions</h2>
+                </div>
+                <BookOpen size={17} />
+              </div>
+              <p className="method-intro">
+                A reproducible snapshot of Venice's on-chain activity on Base,
+                captured from the supplied Allium dashboard on November 10,
+                2026.
+              </p>
+              <dl>
+                {[
+                  [
+                    "Data coverage",
+                    "Daily holder, transfer, and supply history begins January 23, 2025. Price, DEX volume, and trader history begins January 27, 2025. All dates use UTC. The latest day and latest week may be incomplete.",
+                  ],
+                  [
+                    "Price & volume",
+                    "Price is the daily median DEX-implied USD price. DEX volume is unadjusted: wash trading and MEV are included. This dashboard does not use an exchange spot-price feed.",
+                  ],
+                  [
+                    "Supply definition",
+                    "Outstanding supply follows the source calculation: cumulative mints minus cumulative burns. This is on-chain total supply, not a free-float calculation. Staked and treasury balances are not excluded.",
+                  ],
+                  [
+                    "Staking discrepancy",
+                    "The source KPI reports 32.99M VVV staked, while the largest-wallet table reports 34.53M VVV in the sVVV contract. The staking ratio uses the KPI. Contract balance is shown separately because the source does not reconcile these measurements.",
+                  ],
+                  [
+                    "Holder percentages",
+                    "The source table stores percentages as fractions, but displays them incorrectly. This dashboard multiplies those fractions by 100: 0.425043 becomes 42.50%. The denominator is held supply as defined by the source.",
+                  ],
+                  [
+                    "Aggregation",
+                    "Daily is the source frequency for most charts. Weekly buckets begin Monday. Price, supply, burns, and holder counts use the last observation in each bucket. Transfers and volume are summed. Summed daily unique traders are trader-days, not unique people over the whole period. Emissions retain the source weekly buckets.",
+                  ],
+                  [
+                    "Snapshot & refresh",
+                    "The app ships with real extracted data and makes no live-data claims. There is no scheduled refresh or private Allium API connection. CSV exports contain the displayed chart observations; the overview export joins daily price, holders, supply, and volume.",
+                  ],
+                  [
+                    "Wallet coverage",
+                    "The source table is titled Top 50 VVV Holders. The snapshot includes the 25 rows exposed on its first page. Wallet labels are limited to the staking contract identified in the source.",
+                  ],
+                ].map(([title, desc]) => (
+                  <div key={title}>
+                    <dt>{title}</dt>
+                    <dd>{desc}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="contract-box">
+                <span className="eyebrow">VVV TOKEN CONTRACT · BASE</span>
+                <div>
+                  <a
+                    href="https://basescan.org/token/0xacfe6019ed1a7dc6f7b508c02d1b04ec88cc21bf"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    0xacfe6019ed1a7dc6f7b508c02d1b04ec88cc21bf
+                  </a>
+                  <button
+                    className="icon-button"
+                    aria-label="Copy token address"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(
+                          "0xacfe6019ed1a7dc6f7b508c02d1b04ec88cc21bf",
+                        );
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      } catch {
+                        setCopied(false);
+                      }
+                    }}
+                  >
+                    {copied ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+              <a
+                className="source-link"
+                href={source}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open source dashboard <ExternalLink size={14} />
+              </a>
+            </div>
+          )}
+          <footer>
+            <div>
+              <Logo />
+              <span>Venice Observatory</span>
+              <span className="quiet">Independent protocol research</span>
+            </div>
+            <button onClick={() => go("Methodology")}>
+              Data & methodology <ArrowUpRight size={12} />
+            </button>
+          </footer>
+        </main>
+      </div>
+    </div>
+  );
+}
+createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
