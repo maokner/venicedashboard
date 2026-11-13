@@ -22,18 +22,11 @@ import {
   Download,
   ExternalLink,
   CircleHelp,
-  Layers,
-  PanelLeftClose,
-  Menu,
-  X,
   Search,
   Check,
   Copy,
   ArrowRight,
-  Radio,
   BookOpen,
-  Activity,
-  Wallet,
   Flame,
   ChartNoAxesCombined,
 } from "lucide-react";
@@ -59,8 +52,8 @@ const tabs = [
   "Holders",
   "Methodology",
 ];
-const peach = "#e7ad79",
-  green = "#8bac91";
+const purple = "#9b58c7",
+  teal = "#3e8990";
 const dateLabel = (s: string) =>
   new Date(s + "T00:00:00Z").toLocaleDateString("en-US", {
     month: "short",
@@ -118,14 +111,14 @@ function Chart({
   };
   const axes = (
     <>
-      <CartesianGrid vertical={false} stroke="#ffffff0b" />
+      <CartesianGrid vertical={false} stroke="#ececf0" />
       <XAxis
         dataKey="day"
         tickFormatter={dateLabel}
         minTickGap={50}
         tickLine={false}
         axisLine={false}
-        tick={{ fill: "#81877f", fontSize: 10 }}
+        tick={{ fill: "#81818e", fontSize: 10 }}
         dy={12}
       />
       <YAxis
@@ -133,7 +126,7 @@ function Chart({
         tickFormatter={(v) => (currency ? "$" : "") + compact(v, 1)}
         tickLine={false}
         axisLine={false}
-        tick={{ fill: "#81877f", fontSize: 10 }}
+        tick={{ fill: "#81818e", fontSize: 10 }}
         domain={kind === "line" ? ["auto", "auto"] : [0, "auto"]}
       />
       <Tooltip
@@ -144,16 +137,16 @@ function Chart({
           name,
         ]}
         contentStyle={{
-          background: "#252924",
-          border: "1px solid #3d423a",
+          background: "#ffffff",
+          border: "1px solid #dedee5",
           borderRadius: 6,
           fontSize: 12,
         }}
-        labelStyle={{ color: "#aaa", marginBottom: 8 }}
+        labelStyle={{ color: "#626270", marginBottom: 8 }}
         cursor={
           kind === "bar"
-            ? { fill: "#ffffff05" }
-            : { stroke: "#72786d", strokeDasharray: "3 3" }
+            ? { fill: "#9b58c708" }
+            : { stroke: "#a8a8b4", strokeDasharray: "3 3" }
         }
       />
     </>
@@ -179,11 +172,15 @@ function Chart({
         role="img"
         aria-label={`${title}. ${rows.length} observations in the selected period. Hover for values.`}
       >
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          initialDimension={{ width: 400, height: 230 }}
+        >
           {kind === "bar" ? (
             <BarChart {...common}>
               {axes}
-              <ReferenceLine y={0} stroke="#454b41" />
+              <ReferenceLine y={0} stroke="#d8d8e0" />
               {fields.map((f) => (
                 <Bar
                   key={f.key}
@@ -268,7 +265,6 @@ function App() {
   const [tab, setTab] = useState("Overview"),
     [range, setRange] = useState("180D"),
     [bucket, setBucket] = useState("Daily"),
-    [mobile, setMobile] = useState(false),
     [query, setQuery] = useState(""),
     [sort, setSort] = useState("vvv_balance"),
     [asc, setAsc] = useState(false),
@@ -279,9 +275,8 @@ function App() {
     burns = latest("supply", "cumulative_burned");
   const go = (name: string) => {
     setTab(name);
-    setMobile(false);
     setPage(0);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "instant" });
   };
   const filtered = walletRows
     .filter(
@@ -311,8 +306,8 @@ function App() {
   const priceChart = chart(
     "price",
     "VVV price",
-    "Daily median DEX-implied price in USD",
-    [{ key: "vvv_price_usd", label: "VVV / USD", color: peach }],
+    "Daily median DEX-implied USD price; period-end when grouped",
+    [{ key: "vvv_price_usd", label: "VVV / USD", color: purple }],
     "area",
     true,
   );
@@ -320,15 +315,15 @@ function App() {
     "holders",
     "Holder growth",
     "Addresses with a non-zero VVV balance",
-    [{ key: "holders", label: "Holders", color: green }],
+    [{ key: "holders", label: "Holders", color: teal }],
   );
   const volumeChart = chart(
     "volume",
     "DEX volume",
     "Unadjusted buy and sell volume in USD",
     [
-      { key: "buy_volume_usd", label: "Buy volume", color: green },
-      { key: "sell_volume_usd", label: "Sell volume", color: peach },
+      { key: "buy_volume_usd", label: "Buy volume", color: teal },
+      { key: "sell_volume_usd", label: "Sell volume", color: purple },
     ],
     "bar",
     true,
@@ -338,110 +333,56 @@ function App() {
     "Emissions & burns",
     "Weekly minted and burned VVV, including launch",
     [
-      { key: "minted", label: "Minted", color: green },
-      { key: "burned", label: "Burned", color: peach },
+      { key: "minted", label: "Minted", color: teal },
+      { key: "burned", label: "Burned", color: purple },
     ],
     "bar",
   );
   return (
     <div className="app">
-      <aside className={"sidebar " + (mobile ? "open" : "")}>
-        <a className="brand" href="/" aria-label="Venice Observatory home">
-          <span className="brand-icon">
-            <Logo />
-          </span>
+      <aside className="research-rail" aria-label="Workspace">
+        <a className="workspace-brand" href="/" aria-label="AI research home">
+          <ChartNoAxesCombined size={21} />
           <span>
-            venice<span className="brand-sub">OBSERVATORY</span>
+            AI research<span>MARKET INTELLIGENCE</span>
           </span>
         </a>
-        <button
-          className="mobile-close icon-button"
-          onClick={() => setMobile(false)}
-          aria-label="Close navigation"
-        >
-          <X size={20} />
-        </button>
-        <div className="workspace-label">RESEARCH WORKSPACE</div>
-        <div className="workspace">
-          <span className="workspace-avatar">V</span>
-          <span>
-            Venice AI<span>Protocol deep dive</span>
-          </span>
-          <Layers size={15} />
+        <div className="rail-label">RESEARCH UNIVERSE</div>
+        <div className="universe-label">
+          <BookOpen size={15} /> AI &amp; digital assets
         </div>
-        <div className="nav-label">ANALYSIS</div>
-        <nav>
-          {tabs.map((name, i) => {
-            const Icon = [
-              ChartNoAxesCombined,
-              Activity,
-              Flame,
-              Wallet,
-              BookOpen,
-            ][i];
-            return (
-              <button
-                key={name}
-                className={tab === name ? "active" : ""}
-                onClick={() => go(name)}
-              >
-                <Icon size={17} />
-                {name}
-                {tab === name && <span className="nav-dot" />}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="nav-divider" />
-        <div className="nav-label">ECOSYSTEM</div>
-        <a
-          className="side-link"
-          href="https://venice.ai"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <Logo />
-          Venice AI
-          <ArrowUpRight size={14} />
-        </a>
-        <a
-          className="side-link"
-          href="https://basescan.org/token/0xacfe6019ed1a7dc6f7b508c02d1b04ec88cc21bf"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <span className="base-icon" />
-          Base explorer
-          <ArrowUpRight size={14} />
-        </a>
-        <div className="sidebar-bottom">
-          <div className="source-badge">
-            <span className="status-dot" />
-            Allium data snapshot
-          </div>
-          <p>On-chain data. Open research.</p>
-          <a href={source} target="_blank" rel="noreferrer">
-            View original dashboard <ArrowUpRight size={13} />
-          </a>
-          <div className="bottom-wordmark">
+        <div className="project-active" aria-current="page">
+          <span className="project-logo">
             <Logo />
-            <span>Independent research</span>
-          </div>
+          </span>
+          <span>
+            Venice AI<small>VVV · Base</small>
+          </span>
+          <span className="active-mark" />
+        </div>
+        <div className="rail-context">
+          <span className="rail-label">ABOUT THIS RESEARCH</span>
+          <p>
+            Market activity, staking and ownership of Venice's token on Base.
+          </p>
+        </div>
+        <div className="rail-bottom">
+          <span className="rail-label">DATA PROVIDER</span>
+          <a href={source} target="_blank" rel="noreferrer">
+            <span className="allium-mark">◎</span> Allium{" "}
+            <ArrowUpRight size={14} />
+          </a>
+          <p>
+            Snapshot · Nov 10, 2026
+            <br />
+            Historical data, not a live feed.
+          </p>
         </div>
       </aside>
-      {mobile && <div className="scrim" onClick={() => setMobile(false)} />}
       <div className="main-shell">
         <header className="topbar">
           <div>
-            <button
-              className="icon-button menu-toggle"
-              aria-label="Open navigation"
-              onClick={() => setMobile(true)}
-            >
-              <Menu size={19} />
-            </button>
-            <PanelLeftClose className="desktop-only" size={16} />
-            <span className="breadcrumb">AI & crypto</span>
+            <span className="breadcrumb">AI research</span>
             <ChevronRight size={12} />
             <span>Venice AI</span>
           </div>
@@ -459,18 +400,16 @@ function App() {
           <div className="intro">
             <div>
               <div className="eyebrow">
-                <span className="status-dot" /> PROTOCOL DEEP DIVE{" "}
-                <span>/</span> 001
+                AI &amp; DIGITAL ASSETS <span>/</span> RESEARCH NOTE 001
               </div>
               <div className="title-line">
+                <span className="title-logo">
+                  <Logo />
+                </span>
                 <h1>Venice AI</h1>
                 <span className="token-badge">VVV</span>
               </div>
-              <p>
-                The on-chain picture of private AI.
-                <br className="mobile-only" /> Markets, participation, and token
-                economics.
-              </p>
+              <p>Understanding VVV: its market, staking and token economics.</p>
               <div className="intro-meta">
                 <span className="base-icon" /> Base network <i /> Since Jan 23,
                 2025 <i />
@@ -478,6 +417,7 @@ function App() {
               </div>
             </div>
             <button
+              aria-label="Export snapshot data"
               className="export-button"
               onClick={() =>
                 download(
@@ -494,18 +434,90 @@ function App() {
               <Download size={14} /> Export data
             </button>
           </div>
-          <div className="tabbar" role="tablist" aria-label="Research sections">
+          <nav className="tabbar" aria-label="Research sections">
             {tabs.map((name) => (
               <button
-                role="tab"
-                aria-selected={tab === name}
+                aria-current={tab === name ? "page" : undefined}
                 key={name}
                 onClick={() => go(name)}
               >
                 {name}
               </button>
             ))}
-          </div>
+          </nav>
+          <section className="section-context" key={tab}>
+            <div className="section-kicker">
+              {tab === "Overview"
+                ? "THE RESEARCH BRIEF"
+                : "VENICE AI / " + tab.toUpperCase()}
+            </div>
+            <h2>
+              {
+                (
+                  {
+                    Overview: "What is Venice, and what does VVV tell us?",
+                    "Market activity": "How is VVV trading?",
+                    "Staking & supply":
+                      "How much VVV is staked, and is supply shrinking?",
+                    Holders: "Who holds VVV?",
+                    Methodology:
+                      "Understand the data before drawing conclusions.",
+                  } as Record<string, string>
+                )[tab]
+              }
+            </h2>
+            <p>
+              {
+                (
+                  {
+                    Overview:
+                      "Venice AI is the project behind VVV, a token on Base. This research follows the token from launch through its trading activity, staking and ownership. The Allium source covers on-chain activity; it does not measure AI product usage or business revenue.",
+                    "Market activity":
+                      "Read price alongside volume and trader participation. DEX activity measures token trading, so it cannot tell us how many people use Venice’s AI product.",
+                    "Staking & supply":
+                      "Staking and token supply answer different questions. The staking KPI measures VVV committed as sVVV, while mints and burns determine how much VVV exists.",
+                    Holders:
+                      "A wallet is an address, not necessarily a person. The largest wallet is the sVVV staking contract, which can hold tokens on behalf of many stakers.",
+                    Methodology:
+                      "Every chart uses the supplied Allium extract. Definitions, aggregation rules and source discrepancies are documented below.",
+                  } as Record<string, string>
+                )[tab]
+              }
+            </p>
+          </section>
+          {tab === "Overview" && (
+            <div className="brief-grid">
+              <div>
+                <span className="section-kicker">QUESTIONS TO EXPLORE</span>
+                <ol>
+                  <li>How much supply is committed to staking?</li>
+                  <li>Are burns offsetting new token emissions?</li>
+                  <li>Is ownership broadening beyond the largest wallets?</li>
+                </ol>
+              </div>
+              <div>
+                <span className="section-kicker">AT THE SNAPSHOT</span>
+                <p>
+                  <strong>
+                    {stakeShare.toFixed(1)}% of outstanding VVV is staked.
+                  </strong>{" "}
+                  The staking contract holds{" "}
+                  {compact(walletRows[0].vvv_balance)} VVV, a separate
+                  measurement from the {compact(staked)} staking KPI.
+                </p>
+                <p>
+                  Supply is{" "}
+                  {Math.abs(
+                    (supply / Number(history.supply[0].circulating_supply) -
+                      1) *
+                      100,
+                  ).toFixed(1)}
+                  % below its first recorded level. Read emissions and burns
+                  together to understand the change.
+                </p>
+              </div>
+            </div>
+          )}
           {tab !== "Methodology" && (
             <>
               <div className="section-tools">
@@ -519,6 +531,7 @@ function App() {
                       <button
                         key={r}
                         onClick={() => setRange(r)}
+                        aria-pressed={range === r}
                         className={range === r ? "selected" : ""}
                       >
                         {r === "ALL" ? "All time" : r}
@@ -547,8 +560,6 @@ function App() {
                     detail: (
                       <Change value={pctChange("price", "vvv_price_usd", 30)} />
                     ),
-                    data: "price",
-                    field: "vvv_price_usd",
                   },
                   {
                     label: "Token holders",
@@ -556,8 +567,6 @@ function App() {
                     detail: (
                       <Change value={pctChange("holders", "holders", 30)} />
                     ),
-                    data: "holders",
-                    field: "holders",
                   },
                   {
                     label: "Total staked",
@@ -568,8 +577,6 @@ function App() {
                         of outstanding supply
                       </span>
                     ),
-                    data: "",
-                    field: "",
                   },
                   {
                     label: "Outstanding supply",
@@ -579,8 +586,6 @@ function App() {
                         Minted supply minus burns
                       </span>
                     ),
-                    data: "supply",
-                    field: "circulating_supply",
                   },
                 ].map((m) => (
                   <div className="metric" key={m.label}>
@@ -595,25 +600,6 @@ function App() {
                     </div>
                     <div className="metric-value">{m.value}</div>
                     {m.detail}
-                    {m.data && (
-                      <div className="sparkline">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart
-                            data={history[m.data as Dataset].slice(-60)}
-                          >
-                            <Line
-                              type="monotone"
-                              dataKey={m.field}
-                              stroke={m.data === "price" ? peach : green}
-                              dot={false}
-                              strokeWidth={1.3}
-                              isAnimationActive={false}
-                            />
-                            <YAxis hide domain={["dataMin", "dataMax"]} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -636,25 +622,14 @@ function App() {
                 {priceChart}
                 {holdersChart}
               </div>
-              <div className="research-note">
-                <span className="note-icon">
-                  <Radio size={18} />
-                </span>
-                <div>
-                  <span className="eyebrow">WHAT TO WATCH</span>
-                  <p>Start with staking, then follow the supply.</p>
-                  <span>
-                    {stakeShare.toFixed(1)}% of outstanding VVV is staked.
-                    Compare emissions with burns to see whether token supply is
-                    expanding or contracting.
-                  </span>
-                </div>
-                <button
-                  onClick={() => go("Staking & supply")}
-                  aria-label="Explore staking and supply"
-                >
-                  <ArrowUpRight size={20} />
-                </button>
+              <div className="chart-reading">
+                <BookOpen size={17} />
+                <p>
+                  <strong>Reading price and participation.</strong> Price is the
+                  daily median implied by DEX trades. Holders are addresses with
+                  a non-zero balance. An increase in either metric alone does
+                  not establish growth in Venice product usage.
+                </p>
               </div>
               <div className="section-heading">
                 <div>
@@ -732,7 +707,7 @@ function App() {
                         bucket === "Daily"
                           ? "Daily traders"
                           : "Sum of daily traders",
-                      color: green,
+                      color: teal,
                     },
                   ],
                   "bar",
@@ -761,7 +736,7 @@ function App() {
                       key: "traders",
                       label:
                         bucket === "Daily" ? "Daily traders" : "Trader-days",
-                      color: green,
+                      color: teal,
                     },
                   ],
                   "bar",
@@ -770,7 +745,7 @@ function App() {
                   "transfers",
                   "VVV transfers",
                   "Token transfer events, including contract activity",
-                  [{ key: "transfers", label: "Transfers", color: peach }],
+                  [{ key: "transfers", label: "Transfers", color: purple }],
                   "bar",
                 )}
               </div>
@@ -801,7 +776,7 @@ function App() {
                     {
                       key: "circulating_supply",
                       label: "Outstanding VVV",
-                      color: green,
+                      color: teal,
                     },
                   ],
                   "line",
@@ -814,7 +789,7 @@ function App() {
                     {
                       key: "cumulative_burned",
                       label: "Burned VVV",
-                      color: peach,
+                      color: purple,
                     },
                   ],
                 )}
@@ -924,7 +899,16 @@ function App() {
                         ["pct_of_held_supply", "Held supply"],
                         ["net_flow_30d", "Net flow · 30d"],
                       ].map(([key, label]) => (
-                        <th key={key}>
+                        <th
+                          key={key}
+                          aria-sort={
+                            sort === key
+                              ? asc
+                                ? "ascending"
+                                : "descending"
+                              : "none"
+                          }
+                        >
                           <button
                             onClick={() => {
                               setSort(key);
@@ -1106,8 +1090,8 @@ function App() {
           <footer>
             <div>
               <Logo />
-              <span>Venice Observatory</span>
-              <span className="quiet">Independent protocol research</span>
+              <span>AI research / Venice AI</span>
+              <span className="quiet">On-chain research · Allium data</span>
             </div>
             <button onClick={() => go("Methodology")}>
               Data & methodology <ArrowUpRight size={12} />

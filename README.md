@@ -1,7 +1,8 @@
-# Venice Observatory
+# Venice AI research
 
 A responsive Venice AI research dashboard built with React, TypeScript, Vite, and Recharts.
-The layout draws on the tabbed research structure of [Allium's AMM deep dive](https://app.allium.so/terminal/deep-dives/amm-market-structure).
+The light research workspace uses one section navigation and a project rail for a larger AI research dashboard.
+The explanatory structure draws on [Allium's AMM deep dive](https://app.allium.so/terminal/deep-dives/amm-market-structure).
 The data comes from the supplied [Venice AI dashboard](https://app.allium.so/s/dashboard/9XoYYU3Bw87GoLWEzQkaHw).
 
 ## Run locally
@@ -43,3 +44,9 @@ Latest headline metrics remain fixed to the snapshot while date filters affect c
 
 To refresh the snapshot, replace the relevant JSON data arrays with a new authorized Allium export, preserve their field names, and update the capture date labels and methodology.
 For automatic refresh, connect a supported Allium API or scheduled export in a server-side job; do not expose private API keys in client code.
+
+## Redesign
+
+[Design review and rationale](docs/redesign.md) documents the Cornell reference, navigation changes, content structure and validation.
+`public/data/verification.json` records the full source comparison performed November 13, 2026.
+All eight dataset checksums match the supplied Allium page.

@@ -1,0 +1,84 @@
+{
+  "source": "https://app.allium.so/s/dashboard/9XoYYU3Bw87GoLWEzQkaHw",
+  "verifiedOn": "2026-11-13",
+  "method": "SHA-256 of JSON rows, preserving row order and sorting the chart field names alphabetically. Includes day plus y-axis fields for charts, and configured columns for the wallet table. All eight local dataset hashes matched the source page.",
+  "datasets": [
+    {
+      "title": "VVV Holders",
+      "rows": 657,
+      "last": {
+        "day": "2026-11-10 00:00:00+00",
+        "holders": 85036
+      },
+      "sha256": "3bfaa13e0f20d68a5bb181948af198b55f381d62e7126628bf9cdbb8ba7da7eb"
+    },
+    {
+      "title": "Daily VVV Transfers",
+      "rows": 657,
+      "last": {
+        "day": "2026-11-10 00:00:00+00",
+        "transfers": 88009
+      },
+      "sha256": "a254ac0420e4b52310829618161bccfbd29df881a0e3dcb067bc56ba94adb6c7"
+    },
+    {
+      "title": "Circulating Supply vs Cumulative Burned",
+      "rows": 657,
+      "last": {
+        "circulating_supply": 81229786.41924353,
+        "cumulative_burned": 33958169.742917225,
+        "day": "2026-11-10 00:00:00+00"
+      },
+      "sha256": "1680272fe68cccd92db3a17ba01eb1006b52521b83f7b756f82eefb526df6e41"
+    },
+    {
+      "title": "Emissions vs Burns",
+      "rows": 95,
+      "last": {
+        "burned": -23778.36800121901,
+        "day": "2026-11-09 00:00:00+00",
+        "minted": 10514.01572805682
+      },
+      "sha256": "9a2878e562f700dae56bf9f26a1364a62cf93e99381656a9e194aeb945e5f132"
+    },
+    {
+      "title": "VVV Price (USD)",
+      "rows": 653,
+      "last": {
+        "day": "2026-11-10 00:00:00+00",
+        "vvv_price_usd": 19.845804031061963
+      },
+      "sha256": "83193c97a3a99dbed379d8ad2f667b7fed6c50390528e9bcf43b04c9e549bdf4"
+    },
+    {
+      "title": "DEX Volume: Buys vs Sells",
+      "rows": 653,
+      "last": {
+        "buy_volume_usd": 6113821.489607598,
+        "day": "2026-11-10 00:00:00+00",
+        "sell_volume_usd": 6908465.892743405
+      },
+      "sha256": "d2ec94435405a22873f25093fa313b7b7b60e9d3d7f5e3376468310b93034594"
+    },
+    {
+      "title": "Daily DEX Traders",
+      "rows": 653,
+      "last": {
+        "day": "2026-11-10 00:00:00+00",
+        "traders": 2489
+      },
+      "sha256": "070e069c54e08620341430389e71137b54b52f01c347332eb7929550f45fb1f0"
+    },
+    {
+      "title": "Top 50 VVV Holders",
+      "rows": 25,
+      "last": {
+        "address": "0xbc7f570c408840d27b6f12448c36567c2531a194",
+        "net_flow_30d": 178440.6006349134,
+        "pct_of_held_supply": 0.0021967385179858163,
+        "vvv_balance": 178440.6006349134
+      },
+      "sha256": "4ec27bfd98a2424a33538aed1f2be09bff80f597f72c67b292c61d98252c3f46"
+    }
+  ]
+}
