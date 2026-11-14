@@ -30,7 +30,7 @@
   }
   const signed = (v, f) => (v == null ? "–" : (v > 0 ? "+" : v < 0 ? MINUS : "") + f(Math.abs(v)));
   const F = {
-    usd: (v) => (v == null ? "–" : (v < 0 ? MINUS + "$" : "$") + compact(Math.abs(v))),
+    usd: (v) => (v == null ? "–" : (v < 0 ? MINUS + "$" : "$") + compact(Math.abs(v), 1, Math.abs(v) >= 1e6)),
     usd2: (v) => (v == null ? "–" : (v < 0 ? MINUS : "") + "$" + d3.format(",.2f")(Math.abs(v))),
     usd0: (v) => (v == null ? "–" : (v < 0 ? MINUS : "") + "$" + d3.format(",.0f")(Math.abs(v))),
     num: (v) => compact(v),
@@ -133,7 +133,7 @@
     if (period === "M") ts = ts.map((t) => new Date((+t + +d3.utcMonth.offset(t, 1)) / 2));
     const [r0, r1] = x.range();
     const edge = period === "M" ? 2 : 14;
-    ts = ts.filter((t) => x(t) >= r0 + edge && x(t) <= r1 - edge);
+    ts = ts.filter((t) => x(t) >= r0 + edge && x(t) <= r1 + 2);
     if (ts.length < 2) ts = x.ticks(3);
     return { ticks: ts, fmt: d3.utcFormat(spanDays > 150 ? "%b \u2019%y" : "%b %-d") };
   }
@@ -167,7 +167,7 @@
       const narrow = W < 520;
       const hasY2 = series.some((s) => s.axis === "y2" && !s.noLine);
       const hasEv = cfg.events && cfg.events.length;
-      const M = { t: hasEv ? 34 : 12, r: hasY2 ? 52 : cfg.endLabel ? 58 : 14, b: 26, l: 52 };
+      const M = { t: hasEv || cfg.topPad ? 34 : 12, r: hasY2 ? 52 : cfg.endLabel ? 58 : 14, b: 26, l: 52 };
       const period = cfg.period || "D";
       const data = cfg.data.map((r) => {
         const d = r._d || parse(r.d);
@@ -202,13 +202,15 @@
       const yv = yVals("y");
       if (!yv.length) yv.push(0, 1);
       let y, lt = null;
-      if (cfg.logY && d3.min(yv) > 0) {
-        y = d3.scaleLog().domain([d3.min(yv) * 0.9, d3.max(yv) * 1.1]).range([H - M.b, M.t]);
+      const pos = yv.filter((v) => v > 0);
+      if (cfg.logY && pos.length) {
+        y = d3.scaleLog().domain([d3.quantile(pos.sort(d3.ascending), bars ? 0.02 : 0) * 0.9, d3.max(pos) * 1.1]).range([H - M.b, M.t]).clamp(true);
         lt = logTicks(y.domain()) || d3.scaleLinear().domain(y.domain()).ticks(5).filter((t) => t > 0);
       } else {
         const mn = d3.min(yv), mx = d3.max(yv);
         const lo = cfg.yMin === "auto" ? (mn >= 0 ? Math.max(0, mn - (mx - mn) * 0.08) : mn - (mx - mn) * 0.08) : cfg.yMin != null ? cfg.yMin : Math.min(0, mn);
-        const hi = cfg.yMax != null ? Math.max(cfg.yMax, mx) : mx || 1;
+        let hi = cfg.yMax != null ? Math.max(cfg.yMax, mx) : mx || 1;
+        if (cfg.clipQ && bars && !cfg.logY) { const tops = data.map((r) => d3.sum(series.filter((x) => x.stack && !x.noLine), (x) => r[x.key] || 0)).filter((v) => v > 0).sort(d3.ascending); const q = d3.quantile(tops, cfg.clipQ); if (q && mx > q * 2.5) { hi = q * 1.4; st.clipped = hi; } else st.clipped = null; } else st.clipped = null;
         y = d3.scaleLinear().domain([lo, hi === lo ? lo + 1 : hi]).nice(5).range([H - M.b, M.t]);
       }
       let y2 = null;
@@ -222,7 +224,9 @@
       svg.append("g").attr("class", "ax y").attr("transform", `translate(${M.l},0)`).call(axL().tickFormat(yF).tickPadding(8));
       if (y2) svg.append("g").attr("class", "ax y").attr("transform", `translate(${W - M.r},0)`).call(d3.axisRight(y2).ticks(cfg.yTicks || 5).tickFormat(y2F).tickPadding(8));
       const mt = monthTicks(x, W - M.l - M.r, period, narrow);
-      svg.append("g").attr("class", "ax x").attr("transform", `translate(0,${H - M.b})`).call(d3.axisBottom(x).tickValues(mt.ticks).tickSizeOuter(0).tickSize(0).tickPadding(9).tickFormat(cfg.xFormat || mt.fmt));
+      const axX = svg.append("g").attr("class", "ax x").attr("transform", `translate(0,${H - M.b})`).call(d3.axisBottom(x).tickValues(mt.ticks).tickSizeOuter(0).tickSize(0).tickPadding(9).tickFormat(cfg.xFormat || mt.fmt));
+      // a label that would run past the right edge is anchored at its end instead of dropped
+      axX.selectAll(".tick").each(function (t) { const tx = d3.select(this).select("text"); const w = this.getBBox ? this.querySelector("text").getComputedTextLength() : 0; if (x(t) + w / 2 > W - 2) tx.attr("text-anchor", "end").attr("dx", "0.4em"); if (x(t) - w / 2 < M.l - 30) tx.attr("text-anchor", "start"); });
       if (y.domain()[0] < 0) svg.append("line").attr("x1", M.l).attr("x2", W - M.r).attr("y1", y(0)).attr("y2", y(0)).attr("stroke", css("--line-strong"));
 
       const gPlot = svg.append("g");
@@ -245,7 +249,7 @@
             if (hh <= 0) return;
             gPlot.append("rect").attr("x", g.x).attr("width", g.w).attr("y", y0).attr("height", hh)
               .attr("fill", part ? (s.hatch ? fill : c) : fill).attr("fill-opacity", part ? 0.38 : 1)
-              .attr("stroke", part ? c : stacked[s.key] ? card : null).attr("stroke-width", part ? 1 : stacked[s.key] ? 1 : null)
+              .attr("stroke", part ? c : stacked[s.key] && g.w >= 4 ? card : null).attr("stroke-width", part ? 1 : stacked[s.key] && g.w >= 4 ? 1 : null)
               .attr("stroke-dasharray", part ? "3 2" : null);
           });
         } else if (s.type === "area" || stacked[s.key]) {
@@ -258,6 +262,8 @@
           gPlot.append("path").datum(data).attr("d", line).attr("fill", "none").attr("stroke", c).attr("stroke-width", s.width || 1.6).attr("stroke-dasharray", s.dash ? "5 4" : null).attr("stroke-linejoin", "round");
         }
       });
+      // bars cut at the top of a clipped axis carry their value
+      if (st.clipped) data.forEach((r) => { const tot = d3.sum(series.filter((x) => x.stack && !x.noLine), (x) => r[x.key] || 0); if (tot > st.clipped) { const g = bx(r); gPlot.append("path").attr("d", `M${g.x - 1},${M.t + 6}l${g.w + 2},-4m0,6l${-g.w - 2},4`).attr("stroke", card).attr("stroke-width", 2); gPlot.append("text").attr("class", "refl").attr("x", Math.min(g.x + g.w + 4, W - M.r - 40)).attr("y", M.t + 10).style("fill", css("--fg-2")).text((cfg.yFormat || F.num)(tot)); } });
       // value label at the end of the lead line
       if (cfg.endLabel) {
         const s = series.find((z) => z.type === "line" && !z.noLine);
@@ -325,6 +331,7 @@
         .on("pointerleave", (ev) => { if (ev.pointerType === "mouse") hide(); });
 
       let gEv = null;
+      if (!hasEv && cfg.eventList) { cfg.eventList.innerHTML = ""; const we = cfg.eventList.closest(".with-events"); if (we) we.classList.add("noev"); }
       if (hasEv) gEv = eventMarkers({ el, svg, cfg, data, series, x, X, yOf, M, W, H, tip });
       const shownSeries = all.filter((s) => !s.noLegend);
       if (shownSeries.length > 1 || cfg.legend || anyPart) {
@@ -346,7 +353,7 @@
     const main = series.find((s) => s.type !== "bar" && !s.noLine) || series[0];
     const Y = yOf(main), dom = x.domain();
     const bis = d3.bisector((r) => r._x).center;
-    const STEM = 14, GAPX = 15, GAPY = 15, R = 8;
+    const STEM = 12, GAPX = 21, GAPY = 21, R = 9.5;
     const evs = cfg.events.map((e) => ({ ...e, _d: parse(e.d) })).filter((e) => e._d >= dom[0] && e._d <= dom[1]).sort((a, b) => a._d - b._d);
     const placed = [];
     evs.forEach((e) => {
@@ -354,18 +361,23 @@
       const v = r && r[main.key];
       if (v == null) return;
       const px = x(e._d), py = Y(v);
-      const clash = (yy) => placed.some((p) => Math.abs(p.x - px) < GAPX && Math.abs(p.y - yy) < GAPY);
-      let my = py - STEM - R;
+      const bxp = Math.max(M.l + R + 2, Math.min(px, W - M.r - R - 2));
+      // the line near the badge: keep the badge clear of any point of the line within its width
+      const near = data.filter((r) => r[main.key] != null && Math.abs(X(r) - bxp) <= R + 2).map((r) => Y(r[main.key]));
+      const lineTop = near.length ? Math.min(py, ...near) : py;
+      const clash = (yy) => placed.some((p) => Math.abs(p.x - bxp) < GAPX && Math.abs(p.y - yy) < GAPY);
+      let my = lineTop - STEM - R;
       while (clash(my) && my > R) my -= GAPY;
-      if (my < R) { my = py + STEM + R; while (clash(my)) my += GAPY; }
+      if (my < R) { const lineBot = near.length ? Math.max(py, ...near) : py; my = lineBot + STEM + R; while (clash(my)) my += GAPY; }
       my = Math.max(R, Math.min(my, H - M.b - R - 2));
-      placed.push({ x: px, y: my, px, py, e, n: placed.length + 1 });
+      placed.push({ x: bxp, y: my, px, py, e, n: placed.length + 1 });
     });
     const g = svg.append("g").attr("class", "evm");
     const list = cfg.eventList;
     let ol = null;
     if (list) {
       list.innerHTML = "";
+      const we = list.closest(".with-events"); if (we) we.classList.toggle("noev", !placed.length);
       if (placed.length) {
         const wrap = document.createElement("div"); wrap.className = "evs-wrap";
         const tg = document.createElement("button"); tg.type = "button"; tg.className = "evs-tg"; tg.textContent = `Show ${placed.length} event${placed.length > 1 ? "s" : ""}`;
@@ -377,10 +389,10 @@
     }
     const nodes = placed.map((p) => {
       const m = g.append("g").attr("class", "ev").attr("tabindex", -1);
-      m.append("line").attr("x1", p.px).attr("x2", p.x).attr("y1", p.py + (p.y < p.py ? -3 : 3)).attr("y2", p.y + (p.y < p.py ? R - 1 : -R + 1));
-      m.append("circle").attr("class", "pt").attr("cx", p.px).attr("cy", p.py).attr("r", 2.5);
-      m.append("circle").attr("class", "disc").attr("cx", p.x).attr("cy", p.y).attr("r", 7);
-      m.append("text").attr("x", p.x).attr("y", p.y + 3.8).attr("text-anchor", "middle").text(p.n);
+      m.append("line").attr("x1", p.px).attr("x2", p.x).attr("y1", p.py + (p.y < p.py ? -4 : 4)).attr("y2", p.y + (p.y < p.py ? R : -R));
+      m.append("circle").attr("class", "pt").attr("cx", p.px).attr("cy", p.py).attr("r", 3);
+      m.append("circle").attr("class", "disc").attr("cx", p.x).attr("cy", p.y).attr("r", R);
+      m.append("text").attr("x", p.x).attr("y", p.y + 3.9).attr("text-anchor", "middle").text(p.n);
       m.append("circle").attr("class", "hit").attr("cx", p.x).attr("cy", p.y).attr("r", 13);
       let li = null;
       if (ol) {
@@ -467,7 +479,7 @@
       });
       const fmt = cfg.fmt || F.num;
       const val = (b) => (b.kind === "delta" ? (b.value > 0 ? "+" : MINUS) + fmt(Math.abs(b.value)) : fmt(b.value));
-      const max = d3.max(bars, (b) => Math.max(b.a, b.b)) * 1.04;
+      const max = d3.max(bars, (b) => Math.max(b.a, b.b)) * 1.08;
       const tip = tipFor(el);
       const horiz = W < 480;
       const H = horiz ? bars.length * 30 + 28 : +el.dataset.h || cfg.height || 280;
@@ -480,6 +492,7 @@
         const yb = d3.scaleBand().domain(bars.map((b) => b.label)).range([M.t, H - M.b]).padding(0.25);
         svg.append("g").attr("class", "grid").attr("transform", `translate(0,${H - M.b})`).call(d3.axisBottom(xs).ticks(3).tickSize(-(H - M.b - M.t)).tickFormat(""));
         svg.append("g").attr("class", "ax x").attr("transform", `translate(0,${H - M.b})`).call(d3.axisBottom(xs).ticks(3).tickSize(0).tickPadding(6).tickFormat(cfg.axisFmt || F.num)).select(".domain").remove();
+        gAll.raise();
         bars.forEach((b) => {
           const c = color(b.color || "--c-total");
           const g = gAll.append("g");
@@ -505,6 +518,7 @@
           g.append("text").attr("x", x(b.label) + x.bandwidth() / 2).attr("y", top - 7).attr("text-anchor", "middle").style("font", "600 12px var(--sans)").style("fill", color(b.textColor || "--fg")).text(val(b));
           hover(g, b, c);
         });
+        gAll.raise();
         const ax = svg.append("g").attr("class", "ax x").attr("transform", `translate(0,${H - M.b})`).call(d3.axisBottom(x).tickSize(0).tickPadding(10));
         ax.selectAll("text").each(function (d) {
           const t = d3.select(this); const parts = String(d).split("\n"); t.text(null);
@@ -618,7 +632,7 @@
     words.forEach((w) => { const t = cur ? cur + " " + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; });
     if (cur) lines.push(cur); return lines;
   }
-  async function exportPNG(card, { title, sub, src, name }) {
+  async function exportPNG(card, { title, sub, meta, src, name }) {
     const svgs = [...card.querySelectorAll(".card-b svg")].filter((s) => !s.closest(".tip") && s.getBoundingClientRect().width > 50);
     if (!svgs.length) return;
     const fcss = await fontCSS();
@@ -628,9 +642,11 @@
     meas.font = "500 14px Manrope"; const sl = sub ? wrapText(meas, sub, Wd - pad * 2) : [];
     const leg = [...card.querySelectorAll(".legend button, .legend span.li, .lg-t > div")].map((b) => {
       const i = b.querySelector("i"); const cs = i ? getComputedStyle(i) : null;
-      const c = cs ? (cs.backgroundColor && cs.backgroundColor !== "rgba(0, 0, 0, 0)" ? cs.backgroundColor : cs.borderTopColor || cs.color) : "#999";
-      return { c, t: b.textContent.trim().replace(/\s+/g, " "), off: b.getAttribute("aria-pressed") === "false" };
+      const dashed = !!(i && (i.classList.contains("part") || i.classList.contains("dash")));
+      const c = cs ? (dashed || i.classList.contains("hatch") ? cs.borderTopColor : cs.backgroundColor) : "#999";
+      return { c, t: b.textContent.trim().replace(/\s+/g, " "), off: b.getAttribute("aria-pressed") === "false", dashed, hatch: !!(i && i.classList.contains("hatch")) };
     }).filter((l) => !l.off);
+    const evs = [...card.querySelectorAll(".evl li")].map((li) => ({ n: li.querySelector(".n").textContent, t: `${li.querySelector("b").textContent}, ${li.querySelector(".dt").textContent}` }));
     const parts = [];
     for (const s of svgs) {
       const { clone, w, h } = inlineSVG(s);
@@ -639,23 +655,42 @@
       const img = new Image(); img.src = url; await img.decode().catch(() => {});
       parts.push({ img, w, h, url });
     }
-    const legH = leg.length ? 26 : 0;
-    const H = pad + tl.length * 24 + sl.length * 20 + 12 + d3.sum(parts, (p) => p.h + 8) + legH + 40;
+    meas.font = "500 12px Manrope";
+    const evRows = Math.ceil(evs.length / 2), legH = leg.length ? 26 : 0, evH = evs.length ? evRows * 18 + 8 : 0;
+    meas.font = "400 12px Manrope"; const srcL = wrapText(meas, (src ? "Source: " + src.replace(/\.?\s*$/, ". ") : "") + "Blockchain at Berkeley.", Wd - pad * 2);
+    const H = pad + tl.length * 24 + sl.length * 20 + (meta ? 20 : 0) + 12 + d3.sum(parts, (p) => p.h + 8) + legH + evH + srcL.length * 17 + 24;
     const cv = document.createElement("canvas"); cv.width = Wd * S; cv.height = H * S;
     const ctx = cv.getContext("2d"); ctx.scale(S, S);
     ctx.fillStyle = css("--card"); ctx.fillRect(0, 0, Wd, H);
     let yy = pad + 16;
     ctx.fillStyle = css("--fg"); ctx.font = "600 18px Manrope"; tl.forEach((l) => { ctx.fillText(l, pad, yy); yy += 24; });
     ctx.fillStyle = css("--muted"); ctx.font = "500 14px Manrope"; sl.forEach((l) => { ctx.fillText(l, pad, yy - 2); yy += 20; });
+    if (meta) { ctx.font = "500 12px Manrope"; ctx.fillText(meta, pad, yy - 2); yy += 20; }
     yy += 4;
     parts.forEach((p) => { ctx.drawImage(p.img, pad, yy, p.w, p.h); yy += p.h + 8; URL.revokeObjectURL(p.url); });
     if (leg.length) {
       ctx.font = "500 12px Manrope"; let lx = pad;
-      leg.forEach((l) => { ctx.fillStyle = l.c; ctx.fillRect(lx, yy + 2, 10, 10); ctx.fillStyle = css("--fg-2"); ctx.fillText(l.t, lx + 15, yy + 11); lx += 15 + ctx.measureText(l.t).width + 18; });
+      leg.forEach((l) => {
+        if (l.dashed || l.hatch) { ctx.strokeStyle = l.c; ctx.lineWidth = 1; ctx.setLineDash(l.dashed ? [3, 2] : []); ctx.strokeRect(lx + 0.5, yy + 2.5, 9, 9); ctx.setLineDash([]); }
+        else { ctx.fillStyle = l.c; ctx.fillRect(lx, yy + 2, 10, 10); }
+        ctx.fillStyle = css("--fg-2"); ctx.fillText(l.t, lx + 15, yy + 11); lx += 15 + ctx.measureText(l.t).width + 18;
+      });
       yy += legH;
     }
-    ctx.fillStyle = css("--muted"); ctx.font = "italic 400 12px Manrope";
-    ctx.fillText(src ? "Source: " + src : "", pad, yy + 14);
+    if (evs.length) {
+      ctx.font = "500 12px Manrope"; ctx.fillStyle = css("--fg-2");
+      const colW = (Wd - pad * 2) / 2;
+      evs.forEach((e, i) => {
+        const ex = pad + (i < evRows ? 0 : colW), ey = yy + 12 + (i % evRows) * 18;
+        ctx.fillStyle = css("--fg"); ctx.beginPath(); ctx.arc(ex + 8, ey - 4, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = css("--card"); ctx.font = "600 10px Manrope"; ctx.textAlign = "center"; ctx.fillText(e.n, ex + 8, ey - 0.5); ctx.textAlign = "left";
+        ctx.fillStyle = css("--fg-2"); ctx.font = "500 12px Manrope"; ctx.fillText(e.t, ex + 22, ey);
+      });
+      yy += evH;
+    }
+    ctx.fillStyle = css("--muted"); ctx.font = "400 11.5px Manrope";
+    srcL.forEach((l) => { ctx.fillText(l, pad, yy + 14); yy += 17; });
+    window.__lastExport = { title, sub, meta, src, events: evs.map((e) => e.n + " " + e.t), legend: leg.map((l) => ({ label: l.t, dashed: l.dashed })), name };
     cv.toBlob((b) => download(name, b, "image/png"), "image/png");
   }
 

@@ -1,11 +1,11 @@
 rank,address,label,kind,balance,pct_net,net_flow_30d,allium_pct_field,note,move_note
-1,0x321b7ff75154472b18edb199033ff4d116f340ff,sVVV staking contract,Venice contract,34526180.0,0.42497,167784.0,0.425,includes unstake queue and unclaimed rewards,net staking
-2,0x2d8cb8dc596dad0e1e34e2042e7ae6df93b11524,Venice Genesis Treasury (Safe),Venice,20708001.0,0.25489,-38443.0,0.2549,,
-3,0x4665883f3adb708f301ba75764d39ad0cd2a4d84,Venice Incentive Fund (Safe),Venice,8709008.0,0.1072,0,0.1072,,
+1,0x321b7ff75154472b18edb199033ff4d116f340ff,sVVV staking contract,Venice contract,34526180.0,0.42504,167784.0,0.425,includes unstake queue and unclaimed rewards,net staking
+2,0x2d8cb8dc596dad0e1e34e2042e7ae6df93b11524,Venice Genesis Treasury (Safe),Venice,20708001.0,0.25493,-38443.0,0.2549,,
+3,0x4665883f3adb708f301ba75764d39ad0cd2a4d84,Venice Incentive Fund (Safe),Venice,8709008.0,0.10721,0,0.1072,,
 4,0x0810a411a9c4f4c9dd0cb5d95dfb9aa95a02f043,,Unlabeled,1745143.0,0.02148,0,0.0215,,
-5,0xb3c89592d84ae6adb6a1aa41515ac14ec822b175,Venice Liquidity Safe,Venice,1582917.0,0.01948,10392.0,0.0195,,
+5,0xb3c89592d84ae6adb6a1aa41515ac14ec822b175,Venice Liquidity Safe,Venice,1582917.0,0.01949,10392.0,0.0195,,
 6,0x4cb16d4153123a74bc724d161050959754f378d8,Sablier V2 vesting contract (token streams),Vesting,1032801.0,0.01271,-427346.0,0.0127,,vesting streams released to recipients
-7,0xee5b5b923ffce93a870b3104b7ca09c3db80047a,Bybit: Hot Wallet 4,Exchange,950000.0,0.01169,950000.0,0.0117,,inflow to an exchange wallet
+7,0xee5b5b923ffce93a870b3104b7ca09c3db80047a,Bybit: Hot Wallet 4,Exchange,950000.0,0.0117,950000.0,0.0117,,inflow to an exchange wallet
 8,0x419eedf956b684521a463252e9a90ba915615eab,,Unlabeled,705298.0,0.00868,-723.0,0.0087,,
 9,0x44a3e0f35fe1f2fbaa4310873a8a8125babec61b,,Unlabeled,370356.0,0.00456,2591.0,0.0046,,
 10,0xd201266154f0f69c93fbfed1a5945e0dc7043da0,,Unlabeled,364395.0,0.00449,-338741.0,0.0045,,net outflow
