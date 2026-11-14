@@ -360,6 +360,14 @@ function App() {
           </span>
           <span className="active-mark" />
         </div>
+        <a className="project-link" href="/deep-dive/">
+          <span className="project-logo">
+            <Logo />
+          </span>
+          <span>
+            Deep dive<small>VVV and DIEM</small>
+          </span>
+        </a>
         <div className="rail-context">
           <span className="rail-label">ABOUT THIS RESEARCH</span>
           <p>
@@ -514,6 +522,14 @@ function App() {
                   ).toFixed(1)}
                   % below its first recorded level. Read emissions and burns
                   together to understand the change.
+                </p>
+                <p>
+                  Two things move these figures. Outstanding supply includes
+                  about 31M VVV held in Venice's own wallets, so of circulating
+                  VVV about two-thirds is staked. And almost all of the supply
+                  decline is one event: 32.5M unclaimed airdrop tokens burned on
+                  12 March 2025. Without it, supply has grown since launch.{" "}
+                  <a href="/deep-dive/?tab=supply">See the deep dive</a>.
                 </p>
               </div>
             </div>
