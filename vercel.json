@@ -2,6 +2,9 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "redirects": [
+    { "source": "/deep-dive", "destination": "/deep-dive/", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(.*)",
