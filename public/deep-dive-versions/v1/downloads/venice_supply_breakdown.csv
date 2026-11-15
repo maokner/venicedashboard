@@ -1,0 +1,8 @@
+part,vvv,note
+Burned,33962254.0,"Sent to 0x0. 32.5M of it is the unclaimed airdrop burned on Mar 12, 2025."
+Venice treasury & funds,31000875,"Genesis Treasury, Incentive Fund, Liquidity Safe and two operating wallets (labeled Venice wallets, unstaked VVV)."
+Staked by Venice,3982304,sVVV held by Venice wallets; 1.29M of it is locked to mint Venice's own DIEM.
+"Staked, locked for DIEM",7189224.0,sVVV other holders locked to mint DIEM. Cannot be sold until the DIEM is burned.
+"Staked, unlocked",22013759.0,sVVV held by others and free to unstake (7-day cooldown).
+Vesting & cooldown,1410277.0,1.27M in vesting streams + 0.14M in the 7-day unstake queue.
+Free float,15647801.0,"Everything else: wallets, exchanges and DEX pools. This is the supply that can trade today."

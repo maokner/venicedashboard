@@ -368,6 +368,14 @@ function App() {
             Deep dive<small>VVV and DIEM</small>
           </span>
         </a>
+        <a className="project-link" href="/deep-dive-versions/">
+          <span className="project-logo">
+            <Logo />
+          </span>
+          <span>
+            Design versions<small>Side by side</small>
+          </span>
+        </a>
         <div className="rail-context">
           <span className="rail-label">ABOUT THIS RESEARCH</span>
           <p>

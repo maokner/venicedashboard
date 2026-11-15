@@ -25,6 +25,8 @@
   const arrow = (d, f = (v) => pct(v, 1)) => (!ok(d) ? "" : `<span class="${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${d > 0 ? "↑" : d < 0 ? "↓" : ""} ${f(Math.abs(d))}</span>`);
   const retFmt = (v) => (Math.abs(v) >= 1 ? d3.format(",.0f")(v * 100) : (v * 100).toFixed(1)) + "%";
   const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+  // signed changes read by colour: gain green, loss red, zero muted (theme's --gain / --loss)
+  const sgnCls = (v) => (!ok(v) || v === 0 ? "muted" : v > 0 ? "up" : "down");
   const ICON = {
     dl: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2.5v7.5m0 0 3-3m-3 3-3-3M3 12.5h10"/></svg>',
     img: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="10" rx="1"/><path d="m3 11 3.5-3.5 2.5 2.5 1.5-1.5L13 11"/></svg>',
@@ -113,7 +115,9 @@
   };
   // the price series changes source at the end; say what each stretch is, and call it a close only where it is one
   const PS = META.price_sources || [];
-  W.priceLabel = () => PS.length <= 1 ? (PS[0] ? PS[0].definition + "." : "Daily VVV price.") : PS.map((x, i) => (i === 0 ? `${x.definition} through ${day(x.to)}` : `from ${day(x.from)}, ${x.definition}`)).join("; ") + ".";
+  // short names for the subtitle; Method keeps each stretch's full definition
+  const PS_SHORT = { allium: "Daily median price on Base DEXs", coingecko: "CoinGecko daily close" };
+  W.priceLabel = () => PS.length <= 1 ? (PS[0] ? (PS_SHORT[PS[0].source] || PS[0].definition) + "." : "Daily VVV price.") : PS.map((x, i) => (i === 0 ? PS_SHORT[x.source] || x.definition : `${PS_SHORT[x.source] || x.definition} from ${VC.fmtDayShort(parse(x.from))}`)).join("; ") + ".";
   const lastSrc = (D[D.length - 1] || {}).price_src;
   const isClose = lastSrc === "coingecko";
 
@@ -225,9 +229,9 @@
   const srcText = (o) => [o.src, o.basis ? BASIS[o.basis] + (o.conf ? ", " + o.conf + " confidence" : "") : ""].filter(Boolean).join(". ");
   let ANIM = false;
   const SEEN = new Set();
-  function fig({ slug, span = 6, title, sub, basis, conf, src, body, menu = [], ctl = "", extraCls = "" }) {
+  function fig({ slug, span = 6, title, sub, basis, conf, src, body, menu = [], ctl = "" }) {
     const srcLine = src || basis ? `<div class="src">${src ? "Source: " + src.replace(/\.\s*$/, "") + "." : ""}${basis ? ` <span class="basis">${BASIS[basis]}${conf ? ", " + conf + " confidence" : ""}.</span>` : ""}</div>` : "<div></div>";
-    const el = h(`<section class="fig s${span} ${extraCls}" id="${slug}"><div class="card">
+    const el = h(`<section class="fig s${span}" id="${slug}"><div class="card">
       <div class="card-h"><div class="hi"><div class="t"><h3>${title}</h3>${sub ? `<div class="sub">${sub}</div>` : ""}</div><div class="cc">${ctl}
         <div class="dd more"><button class="ibtn" type="button" aria-label="Chart options" aria-haspopup="menu" aria-expanded="false" title="Download, link, full screen">${ICON.more}</button>
         <div class="menu" role="menu" hidden></div></div></div></div></div>
@@ -420,8 +424,20 @@
     return iso(d3.utcMonth.offset(parse(ref.slice(0, 7) + "-01"), -({ "6M": 6, "1Y": 12 }[p] - 1)));
   }
   const grid = (...figs) => { const g = h('<div class="grid"></div>'); figs.forEach((f) => f && g.appendChild(f)); return g; };
-  const intro = (lede, facts, cls = "") => h(`<section class="intro${facts ? "" : " solo"}${facts && facts.length > 3 ? " wide" : ""} ${cls}"><div class="lede">${lede}</div>${facts ? `<dl class="facts" style="grid-template-columns:repeat(${facts.length},minmax(0,1fr))">${facts.map(([l, v, sub]) => `<div><dt>${l}</dt><dd class="fv">${v}</dd><dd class="fs">${sub || ""}</dd></div>`).join("")}</dl>` : ""}</section>`);
-  const sec = (title, lede) => h(`<section class="sec">${title ? `<h2>${title}</h2>` : ""}${lede ? `<p class="lede">${lede}</p>` : ""}</section>`);
+  // a tab's intro: the lede on the left and its numbers on the right in one row (≥ 1200px), stacked below that.
+  // Overview (cls "ov") keeps its strip under the lede across the full width.
+  const intro = (lede, facts, cls = "") => h(`<section class="intro${facts ? (cls ? "" : " side n" + facts.length) : " solo"} ${cls}"><div class="lede">${lede}</div>${facts ? `<dl class="facts">${facts.map(([l, v, sub]) => `<div><dt>${l}</dt><dd class="fv">${v}</dd><dd class="fs">${sub || ""}</dd></div>`).join("")}</dl>` : ""}</section>`);
+  // a page is a run of sections: a small header (title + one line) over its cards; space between sections, not lines
+  const band = (key, ...nodes) => {
+    const t = typeof key === "string" ? [T("sec_" + key + "_t"), T("sec_" + key + "_s")] : key;
+    const id = "s-" + (typeof key === "string" ? key.replace(/_/g, "-") : t[0].toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+    const s = h(`<section class="band" id="${id}" aria-labelledby="${id}-h"><header class="band-h"><h2 id="${id}-h">${t[0]}</h2>${t[1] ? `<p>${t[1]}</p>` : ""}</header></section>`);
+    nodes.flat().forEach((n) => n && s.appendChild(n));
+    return s;
+  };
+  // group a page's blocks (after its intro) into sections: [[key, number of blocks], …]. A section groups two or more
+  // cards; a key of null leaves a single card standing alone, under its own title, with no section heading over it
+  const sections = (view, plan) => { const kids = [...view.children].slice(1); let i = 0; plan.forEach(([key, n]) => { const part = kids.slice(i, i + n); if (key) view.appendChild(band(key, part)); else part.forEach((k) => view.appendChild(k)); i += n; }); };
   const copyBtn = (text, label) => `<button type="button" class="copy" data-copy="${esc(text)}" aria-label="Copy ${esc(label)}" title="Copy">${ICON.copy}</button>`;
   document.addEventListener("click", (e) => { const b = e.target.closest("[data-copy]"); if (b) copyText(b.dataset.copy, "Address copied"); });
   const contractLine = (keys) => `<div class="cline">${keys.filter((k) => META.contracts && META.contracts[k]).map((k) => `<span>${k} <a class="addr" href="https://basescan.org/token/${META.contracts[k]}" target="_blank" rel="noopener">${short(META.contracts[k])}</a>${copyBtn(META.contracts[k], k + " contract address")}</span>`).join("")}</div>`;
@@ -435,14 +451,32 @@
      SHELL: built once
      ===================================================================== */
   const ch30 = K.price_change_30d;
-  // quote strip: price leads with its 30-day change as a chip, then label-over-value stats from the headline list
+  // header: one uniform ticker (after Hyperliquid). Every figure is a 12px label over a 16px value, whitespace between,
+  // the as-of lines at the right; the price is never larger than the title
   const HL = Object.fromEntries((V.headline || []).map((x) => [x.key, x.value]));
   const hv = (k) => (k in HL ? HL[k] : K[k]);
-  const chip = ok(ch30) ? `<span class="q-chip ${ch30 > 0 ? "up" : ch30 < 0 ? "down" : ""}">${ch30 > 0 ? "↑" : ch30 < 0 ? "↓" : ""} ${pct(Math.abs(ch30), 1)}<small>30D</small></span>` : "";
-  const stat = (l, v, cls = "") => `<div class="q-stat ${cls}"><span class="q-l">${l}</span><span class="q-v">${v}</span></div>`;
-  $("#quote").innerHTML = `<div class="q-lead"><span class="q-sym">VVV</span><span class="q-price">${F.usd2(hv("price"))}</span>${chip}</div>
-    <div class="q-stats">${stat("Market cap", F.usd(hv("mcap_circ")))}${stat("FDV", F.usd(hv("fdv")))}${stat("Staked", pct(hv("staking_ratio_circ"), 1), "xl")}${stat("Burns a year", m$(hv("burn_usd_yr")), "xl")}</div>
-    <div class="q-meta"><span>${isClose ? "Daily close" : "Daily price"}, ${day(AS_OF)}</span><span>Allium data through ${day(META.allium_snapshot)}</span></div>`;
+  const asOf = [`${isClose ? "Daily close" : "Daily price"}, ${day(AS_OF)}`, `Allium data through ${day(META.allium_snapshot)}`];
+  const chg = ok(ch30) ? `<span class="h-chg ${ch30 > 0 ? "up" : ch30 < 0 ? "down" : ""}">${ch30 > 0 ? "↑" : ch30 < 0 ? "↓" : ""} ${pct(Math.abs(ch30), 1)}</span>` : "";
+  const HSTATS = [["Market cap", F.usd(hv("mcap_circ"))], ["FDV", F.usd(hv("fdv"))], ["Staked", pct(hv("staking_ratio_circ"), 1), "xl"], ["Burns a year", m$(hv("burn_usd_yr")), "xl"]];
+  const cell = (l, v, cls = "") => `<div class="h-cell ${cls}"><span class="h-l">${l}</span><span class="h-v">${v}</span></div>`;
+  $("#quote").innerHTML = `<div class="h-cells">${cell("VVV price", F.usd2(hv("price")))}${chg ? cell("30-day change", chg) : ""}${HSTATS.map(([l, v, c]) => cell(l, v, c)).join("")}</div>`;
+  $("#h-meta").innerHTML = `<span>${asOf[0]}</span><span>${asOf[1]}</span>`;
+  // the figures sit in the centre of the bar when they fit there clear of the brand and the date/actions group; when
+  // they don't, they centre in the space between the two (the quote is flex: 1 and centres its row). Padding on the
+  // quote evens out the two sides so its centre is the bar's centre. Off on a wrapped header (≤ 900px).
+  const centreQuote = () => {
+    const qt = $("#quote"), inner = $(".top-in"), cells = $(".h-cells");
+    qt.style.paddingLeft = qt.style.paddingRight = "";
+    if (window.innerWidth <= 900) return;
+    const cs = getComputedStyle(inner), gap = parseFloat(cs.columnGap) || 0;
+    const L = inner.getBoundingClientRect().left + parseFloat(cs.paddingLeft), R = inner.getBoundingClientRect().right - parseFloat(cs.paddingRight);
+    const meta = $("#h-meta"), right = Math.min($(".acts").getBoundingClientRect().left, meta.offsetParent ? meta.getBoundingClientRect().left : Infinity);
+    const leftW = $(".brand").getBoundingClientRect().right - L, rightW = R - right, side = Math.max(leftW, rightW);
+    if (R - L - 2 * side - 2 * gap < cells.scrollWidth) return;
+    qt.style.paddingLeft = side - leftW + "px"; qt.style.paddingRight = side - rightW + "px";
+  };
+  new ResizeObserver(centreQuote).observe($(".top-in"));
+  if (document.fonts) document.fonts.ready.then(centreQuote);
   if (/\/deep-dive\/?$/.test(location.pathname.replace(/index\.html$/, ""))) $(".top-in").insertBefore(h('<a class="host-back" href="../">‹ Venice AI</a>'), $(".brand"));
   const tabsEl = $("#tabs-in");
   TABS.forEach(([id, label]) => tabsEl.appendChild(h(`<a href="${urlFor(id)}" data-tab="${id}">${label}</a>`)));
@@ -556,23 +590,23 @@
   PAGES.overview = (view) => {
     view.appendChild(intro(`<p class="thesis">${T("thesis")}</p>`, [
       ["Share of new VVV burned", pct(share), "Last 30 days, in tokens"],
-      ["Burns needed at today's price", xx(need), "Times the current burn rate"],
-      ["Break-even price", F.usd2(K.break_even_price), "Today's burns buy all new VVV at or below it"],
+      ["Burns needed", xx(need), "At today's price, times the current burn rate"],
+      ["Break-even price", F.usd2(K.break_even_price), "At or below this, today's burns buy all new VVV"],
       ["Holders on Base", C(K.holders), `Addresses, ${d3.utcFormat("%b %-d")(parse(K.holders_date || META.allium_snapshot))}`],
     ], "ov"));
-    view.appendChild(h(`<section class="reads">
+    // the three things to know sit near the top, as plain text under the numbers: they frame every chart below
+    view.firstElementChild.appendChild(h(`<div class="reads">
       <div><h3>${T("ov_read_1_h")}</h3><p>${T("ov_read_1")}</p></div>
       <div><h3>${T("ov_read_2_h")}</h3><p>${W.read2()}</p></div>
-      <div><h3>${T("ov_read_3_h")}</h3><p>${W.read3()}</p></div></section>`));
+      <div><h3>${T("ov_read_3_h")}</h3><p>${W.read3()}</p></div></div>`));
     const ovEvents = ["2025-12-08", "2026-04-15", "2026-07-01", "2026-07-17", "2026-09-21"];
-    view.appendChild(grid(priceChart(evs((e) => ovEvents.includes(e.d)))));
-    view.appendChild(grid(shareChart()));
+    view.appendChild(band("ov_price", grid(priceChart(evs((e) => ovEvents.includes(e.d)))), grid(burnsMonthly(), emittedBurned())));
     const box = h('<div class="diagram"></div>');
     const flowEl = fig({ slug: "flow", span: 12, title: T("ov_flow_t"), sub: T("ov_flow_s"), body: box, src: "Venice docs, Base, venicestats; ARR and users are Venice's own figures",
       menu: [{ icon: "img", label: "Download PNG", run: () => VC.exportPNG(flowEl.querySelector(".card"), { title: T("ov_flow_t"), sub: T("ov_flow_s"), meta: `Data through ${day(AS_OF)}.`, src: "Venice docs, Base, venicestats", name: `venice_flow_${AS_OF}.png` }) }] });
     view.appendChild(grid(flowEl));
     requestAnimationFrame(() => { drawFlow(box); VC.observe(box, () => drawFlow(box)); });
-    view.appendChild(signals());
+    view.appendChild(grid(signals()));
   };
 
   const PRICE_ROWS = D.filter((r) => r.price != null);
@@ -626,9 +660,8 @@
   }
 
   function signals() {
-    const s = sec(T("sig_h"), T("sig_s"));
     const tabOf = { demand: "revenue", revenue: "revenue", supply: "supply", holders: "holders", diem: "diem", valuation: "valuation", market: "valuation" };
-    const tb = h(`<div class="card" style="padding:4px 16px"><div class="tw"><table class="t sig"><thead><tr><th>Signal</th><th class="r">Now</th><th class="hide-sm">Trend</th><th>Reads as</th></tr></thead><tbody></tbody></table></div></div>`);
+    const tb = h(`<div class="tw"><table class="t sig"><thead><tr><th>Signal</th><th class="r">Now</th><th class="hide-sm">Trend</th><th>Reads as</th></tr></thead><tbody></tbody></table></div>`);
     (V.signals || []).forEach((g) => {
       const t = tabOf[g.ch] || "overview";
       const lean = W.lean[g.lean] || W.lean.neutral;
@@ -637,54 +670,53 @@
       tb.querySelector("tbody").appendChild(tr);
       if (g.spark) requestAnimationFrame(() => VC.spark(tr.querySelector(".sp"), g.spark, { color: "--c-lead" }));
     });
-    s.appendChild(tb);
-    s.appendChild(h(`<div class="src">Source: Allium, Base, venicestats. Our reading of each trend, not a forecast.</div>`));
-    return s;
+    return fig({ slug: "signals", span: 12, title: T("sig_h"), sub: T("sig_s"), src: "Allium, Base, venicestats. Our reading of each trend, not a forecast", body: tb });
   }
 
   PAGES.revenue = (view) => {
     view.appendChild(intro(`<p>${T("rev_lede")}</p>`, [
       [`Burns in ${monName(mLast)}`, F.usd(K.burn_rev_last_full_usd), `${W.burnDir() === "up from" ? "Up" : "Down"} from ${P.burn_6m_mo} in ${P.m6_name}`],
-      [`Subscriptions, ${d3.utcFormat("%b")(parse((mLast || AS_OF.slice(0, 7)) + "-01"))}`, P.subs_last, "New plans; one burn each"],
+      [`Subscriptions, ${d3.utcFormat("%b")(parse((mLast || AS_OF.slice(0, 7)) + "-01"))}`, P.subs_last, "New plans, one burn each"],
       ["API purchases per year", P.api_yr, "Implied by credit burns"],
     ]));
     const MS = monthRows("subs"), MA = monthRows("api");
-    view.appendChild(grid(burnsMonthly(),
+    view.appendChild(band("rev_month", grid(burnsMonthly(),
       chartFig({ slug: "subscriptions", span: 6, title: T("rev_subs_t"), sub: T("rev_subs_s"), basis: "thirdparty", conf: "medium", src: "Base subscription burns; tier split by venicestats", csvCols: ["new_subs_pro", "new_subs_plus", "new_subs_max", "new_sub_first_month_usd", "days_in_month"],
         time: { rows: MS.filter((m) => m.m >= "2026-04"), key: "m", def: "All", bars: true } },
         (subs) => ({ data: subs, height: 240, total: "All new plans", series: [
           { key: "new_subs_pro", label: `Pro, $${META.prices ? META.prices.pro : 18} a month`, color: "--c-tier1", type: "bar", stack: "s" },
           { key: "new_subs_plus", label: `Pro Plus, $${META.prices ? META.prices.plus : 68}`, color: "--c-tier2", type: "bar", stack: "s" },
           { key: "new_subs_max", label: `Max, $${META.prices ? META.prices.max : 200}`, color: "--c-tier3", type: "bar", stack: "s" },
-        ], yFormat: F.num, tipFormat: F.int, partLabel: "In progress", tipNote: (r) => `First month at list price: ${F.usd(r.new_sub_first_month_usd)}` }))));
+        ], yFormat: F.num, tipFormat: F.int, partLabel: "In progress", tipNote: (r) => `First month at list price: ${F.usd(r.new_sub_first_month_usd)}` })))));
     const arr = K.disclosed_arr;
-    view.appendChild(grid(chartFig({ slug: "api-purchases", span: 12, title: T("rev_api_t"), sub: T("rev_api_s"), note: W.apiNote(), basis: "modeled", conf: "medium", src: "Base credit burns (venicestats classification) divided by 5%", csvCols: ["credits_burn_usd_vs", "implied_api_credit_purchases", "days_in_month"],
-      time: { rows: MA.filter((m) => m.m >= "2026-07"), key: "m", def: "All", bars: true } },
-      (api) => ({ data: api, height: 250, legend: true, series: [{ key: "implied_api_credit_purchases", label: "Implied API purchases (modeled)", color: "--c-tier1", type: "bar", hatch: true }],
-        yFormat: F.usd, yMax: ok(arr) ? (arr / 12) * 1.12 : null, refLines: ok(arr) ? [{ value: arr / 12, label: `${ARR}, per month`, color: "--muted", inDomain: true }] : [], partLabel: "In progress",
-        tipNote: (r) => { const n = r.days_covered ? r.days_covered.api : r.days; return n ? `Annualized ${F.usd((r.implied_api_credit_purchases * 365) / n)}` : ""; } }))));
-    view.appendChild(grid(chartFig({ slug: "burns-daily", span: 12, title: T("rev_daily_t"), sub: T("rev_daily_s"), basis: "onchain", src: "Allium daily burns; Base after Allium's last day", csvCols: ["burn_programmatic_usd"],
-      time: { rows: (() => { const rs = D.filter((r) => r.burn_programmatic_usd != null), i = rs.findIndex((r) => r.burn_programmatic_usd >= 500); return i > 0 ? rs.slice(i) : rs; })(), key: "d", def: "1Y", bars: true, agg: { burn_programmatic_usd: "sum" } } },
-      (dr) => ({ data: dr, height: 220, series: [{ key: "burn_programmatic_usd", label: "Subscriptions and API credits", color: "--c-burn", type: "bar" }], yFormat: F.usd, partLabel: "In progress" }))));
-    const bb = (V.disc_history || []).slice().reverse();
-    const bbRow = (x) => { const r = D.find((d) => d.d === x.date); return `<tr><td>${day(x.date)}</td><td class="r">${d3.format(",.0f")(x.vvv_burned)}</td><td class="r">${r && r.price ? F.usd(x.vvv_burned * r.price) : "–"}</td><td class="addr hide-sm">${x.tx_hash ? `<a href="https://basescan.org/tx/${x.tx_hash}" target="_blank" rel="noopener">${x.tx_hash.slice(0, 10)}…</a>` : "–"}</td></tr>`; };
-    const bbEl = fig({ slug: "buybacks", span: 7, title: T("rev_buyback_t"), sub: T("rev_buyback_s"), src: "Base, Venice buyback Safe 0x35fb…dc57",
-      menu: [{ icon: "dl", label: "Download CSV", run: () => VC.download(`venice_buybacks_${AS_OF}.csv`, VC.toCSV(csvRows(V.disc_history || []))) }],
-      body: `<div class="tw"><table class="t"><thead><tr><th>Date</th><th class="r">VVV burned</th><th class="r">Value then</th><th class="hide-sm">Transaction</th></tr></thead><tbody>${bb.slice(0, 6).map(bbRow).join("")}</tbody></table></div>${bb.length > 6 ? `<div class="rows-f"><span>6 of ${bb.length} buybacks</span><button type="button" class="more-rows">Show all ${bb.length}</button></div>` : ""}` });
-    const mbb = bbEl.querySelector(".more-rows");
-    if (mbb) mbb.addEventListener("click", () => { const all = mbb.textContent.startsWith("Show all"); bbEl.querySelector("tbody").innerHTML = (all ? bb : bb.slice(0, 6)).map(bbRow).join(""); mbb.textContent = all ? "Show 6" : `Show all ${bb.length}`; mbb.previousElementSibling.textContent = `${all ? bb.length : 6} of ${bb.length} buybacks`; });
-    view.appendChild(grid(bbEl,
-      fig({ slug: "burn-rules", span: 5, title: T("rev_rules_t"), sub: T("rev_rules_s"), src: "Venice blog, Apr 15 and Jul 17, 2026; venice.ai/pricing",
+    const rulesEl = fig({ slug: "burn-rules", span: 5, title: T("rev_rules_t"), sub: T("rev_rules_s"), src: "Venice blog, Apr 15 and Jul 17, 2026; venice.ai/pricing",
         body: `<div class="tw"><table class="t"><thead><tr><th>When</th><th class="r">Burned</th></tr></thead><tbody>${[
           [`New Pro plan ($${META.prices.pro} a month)`, "$2"], [`New Pro Plus plan ($${META.prices.plus})`, "$5"], [`New Max plan ($${META.prices.max})`, "$10"],
-          ["API-credit purchase", pct(META.credit_burn_share) + " of it"], ["Once a month", "The buyback budget"]].map(([a, b]) => `<tr><td>${a}</td><td class="r" style="white-space:nowrap">${b}</td></tr>`).join("")}</tbody></table></div>` })));
+          ["API-credit purchase", pct(META.credit_burn_share) + " of it"], ["Once a month", "The buyback budget"]].map(([a, b]) => `<tr><td>${a}</td><td class="r" style="white-space:nowrap">${b}</td></tr>`).join("")}</tbody></table></div><p class="card-note">Each sale's burn is its own swap through the Aerodrome VVV/WETH pool; the buyback is one transaction a month.</p>` });
+    const apiEl = grid(chartFig({ slug: "api-purchases", span: 12, title: T("rev_api_t"), sub: T("rev_api_s"), note: W.apiNote(), basis: "modeled", conf: "medium", src: "Base credit burns (venicestats classification) divided by 5%", csvCols: ["credits_burn_usd_vs", "implied_api_credit_purchases", "days_in_month"],
+      time: { rows: MA.filter((m) => m.m >= "2026-07"), key: "m", def: "All", bars: true } },
+      (api) => ({ data: api, height: 200, legend: true, series: [{ key: "implied_api_credit_purchases", label: "Implied API purchases (modeled)", color: "--c-tier1", type: "bar", hatch: true }],
+        yFormat: F.usd, yMax: ok(arr) ? (arr / 12) * 1.12 : null, refLines: ok(arr) ? [{ value: arr / 12, label: `${ARR}, per month`, color: "--muted", inDomain: true }] : [], partLabel: "In progress",
+        tipNote: (r) => { const n = r.days_covered ? r.days_covered.api : r.days; return n ? `Annualized ${F.usd((r.implied_api_credit_purchases * 365) / n)}` : ""; } })));
+    const dailyEl = grid(chartFig({ slug: "burns-daily", span: 12, title: T("rev_daily_t"), sub: T("rev_daily_s"), basis: "onchain", src: "Allium daily burns; Base after Allium's last day", csvCols: ["burn_programmatic_usd"],
+      time: { rows: (() => { const rs = D.filter((r) => r.burn_programmatic_usd != null), i = rs.findIndex((r) => r.burn_programmatic_usd >= 500); return i > 0 ? rs.slice(i) : rs; })(), key: "d", def: "1Y", bars: true, agg: { burn_programmatic_usd: "sum" } } },
+      (dr) => ({ data: dr, height: 220, series: [{ key: "burn_programmatic_usd", label: "Subscriptions and API credits", color: "--c-burn", type: "bar" }], yFormat: F.usd, partLabel: "In progress" })));
+    const bb = (V.disc_history || []).slice().reverse();
+    const bbRow = (x) => { const r = D.find((d) => d.d === x.date); return `<tr><td>${day(x.date)}</td><td class="r">${d3.format(",.0f")(x.vvv_burned)}</td><td class="r">${r && r.price ? F.usd(x.vvv_burned * r.price) : "–"}</td><td class="addr hide-sm">${x.tx_hash ? `<a href="https://basescan.org/tx/${x.tx_hash}" target="_blank" rel="noopener">${x.tx_hash.slice(0, 10)}…</a>` : "–"}</td></tr>`; };
+    const BB_N = 5;   // rows shown before "Show all": the table then matches the burn rules card beside it
+    const bbEl = fig({ slug: "buybacks", span: 7, title: T("rev_buyback_t"), sub: T("rev_buyback_s"), src: "Base, Venice buyback Safe 0x35fb…dc57",
+      menu: [{ icon: "dl", label: "Download CSV", run: () => VC.download(`venice_buybacks_${AS_OF}.csv`, VC.toCSV(csvRows(V.disc_history || []))) }],
+      body: `<div class="tw"><table class="t"><thead><tr><th>Date</th><th class="r">VVV burned</th><th class="r">Value then</th><th class="hide-sm">Transaction</th></tr></thead><tbody>${bb.slice(0, BB_N).map(bbRow).join("")}</tbody></table></div>${bb.length > BB_N ? `<div class="rows-f"><span>${BB_N} of ${bb.length} buybacks</span><button type="button" class="more-rows">Show all ${bb.length}</button></div>` : ""}` });
+    const mbb = bbEl.querySelector(".more-rows");
+    if (mbb) mbb.addEventListener("click", () => { const all = mbb.textContent.startsWith("Show all"); bbEl.querySelector("tbody").innerHTML = (all ? bb : bb.slice(0, BB_N)).map(bbRow).join(""); mbb.textContent = all ? `Show ${BB_N}` : `Show all ${bb.length}`; mbb.previousElementSibling.textContent = `${all ? bb.length : BB_N} of ${bb.length} buybacks`; });
+    view.appendChild(band("rev_api", apiEl, dailyEl, grid(bbEl, rulesEl)));
   };
 
   PAGES.supply = (view) => {
     view.appendChild(intro(`<p>${T("sup_lede")}</p>`, [
-      ["Emissions per year", vM(K.emission_yr) + " VVV", `Down from ${P.emit_launch} at launch`],
+      ["Emissions per year", vM(K.emission_yr) + " VVV", `Paid to stakers, down from ${P.emit_launch}`],
       ["Burned so far", vM(K.burned) + " VVV", ok(K.burned_oneoff) ? `${vM(K.burned_oneoff)} of it in two burns on Mar 12, 2025` : ""],
-      ["Break-even price", F.usd2(K.break_even_price), "Burns buy all new VVV at or below it"],
+      ["Break-even price", F.usd2(K.break_even_price), "At or below this, today's burns buy all new VVV"],
     ]));
     const steps = (V.waterfall || []).map((w) => {
       const k = w.key || (w.kind === "start" ? "genesis" : w.kind === "end" ? "today" : /emission/i.test(w.label) ? "emissions" : /airdrop/i.test(w.label) ? "airdrop_burn" : /team/i.test(w.label) ? "team_burn" : "revenue_burns");
@@ -697,12 +729,11 @@
       body: h('<div class="wf"></div>') });
     const anim = ANIM && !SEEN.has("waterfall"); SEEN.add("waterfall");
     requestAnimationFrame(() => VC.waterfall(wfEl.querySelector(".wf"), { steps, height: 266, animate: anim, fmt: (v) => (Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(1) + "M" : (v / 1e3).toFixed(0) + "K"), axisFmt: F.num }));
-    view.appendChild(grid(wfEl, emittedBurned()));
-    view.appendChild(grid(calcInflation()));
     const cuts = evs((e) => e.emission_cut || e.d === "2025-03-12");
-    view.appendChild(grid(chartFig({ slug: "net-supply", span: 12, events: true, title: T("sup_net_t"), sub: W.takeaway.net() + " VVV.", basis: "onchain", src: "Allium; after Allium's last day, Base mints and burns", csvCols: ["net_supply", "minted", "burned_allium"],
+    view.appendChild(band("sup_launch", grid(wfEl, emittedBurned()), grid(shareChart()), grid(chartFig({ slug: "net-supply", span: 12, events: true, title: T("sup_net_t"), sub: W.takeaway.net() + " VVV.", basis: "onchain", src: "Allium; after Allium's last day, Base mints and burns", csvCols: ["net_supply", "minted", "burned_allium"],
       time: { rows: D.filter((r) => r.net_supply), key: "d", def: "All", agg: { net_supply: "last", minted: "sum", burned_allium: "sum" } } },
-      (ns) => ({ data: ns, height: 260, yMin: "auto", series: [{ key: "net_supply", label: "Net supply", color: "--c-lead", type: "line", fmt: (v) => vM(v, 2) + " VVV" }], yFormat: F.num, events: cuts }))));
+      (ns) => ({ data: ns, height: 260, yMin: "auto", series: [{ key: "net_supply", label: "Net supply", color: "--c-lead", type: "line", fmt: (v) => vM(v, 2) + " VVV" }], yFormat: F.num, events: cuts })))));
+    view.appendChild(grid(calcInflation()));
   };
 
   PAGES.holders = (view) => {
@@ -718,7 +749,7 @@
     const anW = ANIM && !SEEN.has("where"); SEEN.add("where");
     requestAnimationFrame(() => VC.stackBar(wb, { parts, total: K.ever_minted, fmt: (v) => vM(v), animate: anW }));
     const defs = V.supply_defs || [];
-    const defsEl = (fig({ slug: "supply-defs", span: 7, title: T("hold_defs_t"), sub: T("hold_defs_s"),
+    const defsEl = (fig({ slug: "supply-defs", span: 12, title: T("hold_defs_t"), sub: T("hold_defs_s"),
       body: `<div class="tw"><table class="t"><thead><tr><th>Measure</th><th class="r">VVV</th><th>Answers</th><th class="hide-sm">How it's counted</th></tr></thead><tbody>${defs.map((x) => `<tr><td style="white-space:nowrap"><b>${x.name}</b></td><td class="r">${vM(x.value, 2)}</td><td>${x.question}</td><td class="hide-sm" style="color:var(--muted)">${x.formula ? `${esc(x.formula)}. ` : ""}${x.note}</td></tr>`).join("")}</tbody></table></div>${V.supply_identity ? `<p class="card-note">${esc(V.supply_identity)}</p>` : ""}` }));
     view.appendChild(grid(defsEl, vestingFig()));
     const hEv = evs((e) => ["2025-08-20", "2026-05-12", "2026-10-20"].includes(e.d));
@@ -728,22 +759,25 @@
         (hs) => ({ data: hs, height: 230, yMin: "auto", series: [{ key: "holders", label: "Holders", color: "--c-lead", type: "line", fmt: F.int }], yFormat: F.num, events: hEv })),
       chartFig({ slug: "staked-share", span: 6, title: T("hold_stake_t"), sub: W.stakeSub(), basis: "onchain", src: "Base sVVV mints and burns; circulating = net supply minus Venice wallets' unstaked VVV", csvCols: ["staking_ratio_circ", "staked", "circulating"],
         time: { rows: D.filter((r) => r.staking_ratio_circ != null), key: "d", def: "1Y", agg: { staking_ratio_circ: "last", staked: "last", circulating: "last" } } },
-        (st) => ({ data: st, height: 230, yMin: "auto", topPad: true, series: [
+        // 40px taller than Holders beside it, whose event key sits under its plot, so the two cards end together
+        (st) => ({ data: st, height: 270, yMin: "auto", topPad: true, series: [
           { key: "staking_ratio_circ", label: "Staked share", color: "--c-staked", type: "line", fmt: (v) => pct(v, 1) },
           { key: "staked", label: "Staked VVV", color: "--c-staked", type: "line", noLegend: true, noLine: true, fmt: (v) => vM(v, 2) },
         ], yFormat: F.pct0 }))));
     view.appendChild(grid(venFig()));
     view.appendChild(grid(topHolders()));
+    sections(view, [["hold_where", 2], ["hold_count", 1], ["hold_move", 2]]);
   };
   function vestingFig() {
     const v = V.vesting;
     if (!v) return null;
-    const line = `${vM(v.locked, 2)} VVV still locked in ${v.active_streams} active streams; ${C(v.daily_release)} a day released (about ${pct(v.daily_release * 30 / (K.free_float || 1), 1)} of the free float a month); fully vested by ${d3.utcFormat("%b %Y")(parse(v.fully_vested_by))}.`;
-    const body = `<p class="prose" style="margin:0 0 10px">${line}</p>
-      ${v.cliff && v.cliff.date ? `<p class="prose" style="margin:0 0 8px">On ${day(v.cliff.date)}, ${v.cliff.stream_count} streams end and the daily release drops by ${v.cliff.drop_pct}%.</p>` : ""}
-      <table class="kv" style="margin:4px 0 10px"><tbody>${[["Deposited into streams", v.deposited], ["Withdrawn by recipients so far", v.withdrawn], ["Recipients", v.recipients], ["Streams in all", v.total_streams]].filter((r) => ok(r[1])).map(([l, x]) => `<tr><td class="lab">${l}</td><td class="v">${/Recipients|Streams/.test(l) ? d3.format(",")(x) : vM(x, 2) + " VVV"}</td></tr>`).join("")}</tbody></table>
-      ${ok(v.recipients_net_flow_30d) ? `<p class="prose" style="margin:0">Over the last 30 days, the wallets that receive these streams ${v.recipients_net_flow_30d < 0 ? "sold" : "bought"} a net ${C(Math.abs(v.recipients_net_flow_30d))} VVV on DEXs.</p>` : ""}`;
-    return fig({ slug: "vesting", span: 5, title: T("hold_vest_t"), sub: T("hold_vest_s"), src: "venicestats vesting index of Sablier streams on Base", body });
+    const strip = `<dl class="facts in-card">${[["Still locked", vM(v.locked, 2) + " VVV", `In ${v.active_streams} active streams`], ["Released a day", C(v.daily_release) + " VVV", `About ${pct(v.daily_release * 30 / (K.free_float || 1), 1)} of the free float a month`], ["Fully vested by", d3.utcFormat("%b %Y")(parse(v.fully_vested_by)), "When the last stream ends"]].map(([l, x, sub]) => `<div><dt>${l}</dt><dd class="fv">${x}</dd><dd class="fs">${sub}</dd></div>`).join("")}</dl>`;
+    const cliff = v.cliff && v.cliff.date ? `<p class="prose">On ${day(v.cliff.date)}, ${v.cliff.stream_count} streams end and the daily release drops by ${v.cliff.drop_pct}%.</p>` : "";
+    const flow = ok(v.recipients_net_flow_30d) ? `<p class="prose">Over the last 30 days, the wallets that receive these streams ${v.recipients_net_flow_30d < 0 ? "sold" : "bought"} a net ${C(Math.abs(v.recipients_net_flow_30d))} VVV on DEXs.</p>` : "";
+    const totals = `<table class="kv"><tbody>${[["Deposited into streams", v.deposited], ["Withdrawn by recipients so far", v.withdrawn], ["Recipients", v.recipients], ["Streams in all", v.total_streams]].filter((r) => ok(r[1])).map(([l, x]) => `<tr><td class="lab">${l}</td><td class="v">${/Recipients|Streams/.test(l) ? d3.format(",")(x) : vM(x, 2) + " VVV"}</td></tr>`).join("")}</tbody></table>`;
+    // left: the three figures and what changes next; right: the stream totals
+    const body = `<div class="vest"><div class="vest-l">${strip}${cliff}${flow}</div><div class="vest-r">${totals}</div></div>`;
+    return fig({ slug: "vesting", span: 12, title: T("hold_vest_t"), sub: T("hold_vest_s"), src: "venicestats vesting index of Sablier streams on Base", body });
   }
   function venFig() {
     const tops = (V.top_holders || []).filter((t) => t.kind !== "Venice contract" && Math.abs(t.net_flow_30d || 0) >= 100000).sort((a, b) => Math.abs(b.net_flow_30d) - Math.abs(a.net_flow_30d)).slice(0, 3);
@@ -752,8 +786,8 @@
     const f = K.venice_flow_30d;
     const lead = `Venice's labeled wallets hold ${vM(K.venice_vvv)} VVV unstaked, ${twice((K.venice_vvv || 0) / (K.free_float || 1)).replace("about the same as", "about as much as")} the free float.${ok(f) ? ` Over the 30 days to ${day(K.venice_flow_30d_to || AS_OF)} their balance ${Math.abs(f) < 1000 ? "barely moved" : (f < 0 ? "fell" : "rose") + " by " + C(Math.abs(f)) + " VVV"}${f < 0 && K.venice_to_exchange_30d === 0 ? ", none of it to a labeled exchange" : ""}.` : ""}`;
     const body = `<p class="prose" style="margin:0 0 10px">${lead}</p><div class="two">
-      ${flows.length ? `<div class="tw"><table class="t"><thead><tr><th>Venice wallets, last 30 days</th><th class="r">VVV</th></tr></thead><tbody>${flows.map((x) => `<tr><td>${esc(x.label)}</td><td class="r">${F.signed(x.vvv, (v) => C(v))}</td></tr>`).join("")}</tbody></table></div>` : ""}
-      ${tops.length ? `<div class="tw"><table class="t"><thead><tr><th>Largest 30-day moves, top wallets</th><th class="r">VVV</th></tr></thead><tbody>${tops.map((t) => `<tr><td>${esc(t.label || short(t.address))}<span class="sub-n">${esc(why(t))}</span></td><td class="r">${F.signed(t.net_flow_30d, (x) => C(x))}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`;
+      ${flows.length ? `<div class="tw"><table class="t"><thead><tr><th>Venice wallets, last 30 days</th><th class="r">VVV</th></tr></thead><tbody>${flows.map((x) => `<tr><td>${esc(x.label)}</td><td class="r ${sgnCls(x.vvv)}">${F.signed(x.vvv, (v) => C(v))}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${tops.length ? `<div class="tw"><table class="t"><thead><tr><th>Largest 30-day moves, top wallets</th><th class="r">VVV</th></tr></thead><tbody>${tops.map((t) => `<tr><td>${esc(t.label || short(t.address))}<span class="sub-n">${esc(why(t))}</span></td><td class="r ${sgnCls(t.net_flow_30d)}">${F.signed(t.net_flow_30d, (x) => C(x))}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`;
     return fig({ slug: "venice-wallets", span: 12, title: "Venice's wallets and the big movers", sub: `Venice wallets from Base transfers to ${day(K.venice_flow_30d_to || AS_OF)}; top wallets from Allium to ${day(META.allium_snapshot)}.`, src: "Base transfers; Allium top holders", body });
   }
   function topHolders() {
@@ -766,7 +800,7 @@
     const render = () => {
       const rows = all.slice().sort((a, b) => dir * ((a[sortK] || 0) - (b[sortK] || 0)));
       const shown = showAll ? rows : rows.slice(0, 15);
-      el.querySelector(".card-b").innerHTML = `<div class="tw"><table class="t"><thead><tr><th class="r hide-sm" style="width:36px">#</th><th>Wallet</th><th class="hide-sm">Owner</th>${th("balance", "VVV")}<th class="r hide-sm">Value</th>${th("pct_net", "Share of net supply", "r hide-sm")}${th("net_flow_30d", "30-day change")}</tr></thead><tbody>${shown.map((t) => `<tr><td class="r muted hide-sm">${t.rank}</td><td class="addr"><a href="https://basescan.org/address/${t.address}" target="_blank" rel="noopener">${short(t.address)}</a>${copyBtn(t.address, "address")}<span class="own" style="display:none">${esc(t.label || "Unlabeled")}</span></td><td class="hide-sm">${t.label ? esc(t.label) : '<span class="muted">Unlabeled</span>'}${t.note ? `<span class="sub-n">${esc(t.note)}</span>` : ""}</td><td class="r">${vM(t.balance, 2)}</td><td class="r hide-sm">${F.usd(t.usd)}</td><td class="r hide-sm bar-cell"><span class="bar" style="width:${Math.max(t.pct_net > 0 ? 2 : 0, Math.round((t.pct_net / maxPct) * 64))}px"></span><span>${pct(t.pct_net, 1)}</span></td><td class="r${t.net_flow_30d ? "" : " muted"}">${t.net_flow_30d ? F.signed(t.net_flow_30d, (x) => C(x)) : "0"}</td></tr>`).join("")}</tbody></table></div>
+      el.querySelector(".card-b").innerHTML = `<div class="tw"><table class="t"><thead><tr><th class="r hide-sm" style="width:36px">#</th><th>Wallet</th><th class="hide-sm">Owner</th>${th("balance", "VVV")}<th class="r hide-sm">Value</th>${th("pct_net", "Share of net supply", "r hide-sm")}${th("net_flow_30d", "30-day change")}</tr></thead><tbody>${shown.map((t) => `<tr><td class="r muted hide-sm">${t.rank}</td><td class="addr"><a href="https://basescan.org/address/${t.address}" target="_blank" rel="noopener">${short(t.address)}</a>${copyBtn(t.address, "address")}<span class="own" style="display:none">${esc(t.label || "Unlabeled")}</span></td><td class="hide-sm">${t.label ? esc(t.label) : '<span class="muted">Unlabeled</span>'}${t.note ? `<span class="sub-n">${esc(t.note)}</span>` : ""}</td><td class="r">${vM(t.balance, 2)}</td><td class="r hide-sm">${F.usd(t.usd)}</td><td class="r hide-sm bar-cell"><span class="bar" style="width:${Math.max(t.pct_net > 0 ? 2 : 0, Math.round((t.pct_net / maxPct) * 64))}px"></span><span>${pct(t.pct_net, 1)}</span></td><td class="r ${sgnCls(t.net_flow_30d)}">${t.net_flow_30d ? F.signed(t.net_flow_30d, (x) => C(x)) : "0"}</td></tr>`).join("")}</tbody></table></div>
         <div class="rows-f"><span>${shown.length} of ${all.length} wallets</span>${all.length > 15 ? `<button type="button" class="more-rows">${showAll ? "Show 15" : `Show all ${all.length}`}</button>` : ""}</div>`;
       el.querySelectorAll("th.sort button").forEach((b) => b.addEventListener("click", () => { const k = b.dataset.k; if (k === sortK) dir = -dir; else { sortK = k; dir = -1; } render(); }));
       const mb = el.querySelector(".more-rows"); if (mb) mb.addEventListener("click", () => { showAll = !showAll; render(); });
@@ -780,9 +814,9 @@
     view.appendChild(intro(`<p>${T("diem_lede")}</p>${contractLine(["DIEM", "sVVV"])}`, [
       ["DIEM outstanding", C(K.diem_supply), ok(K.diem_cap) ? `Cap ${C(K.diem_cap)}` : ""],
       ["Minted by Venice", P.diem_venice_share, "Of DIEM outstanding"],
-      ["Daily credit used", P.diem_util, "Last 30 days, all staked DIEM (venicestats)"],
+      ["Daily credit used", P.diem_util, "Last 30 days, all staked DIEM"],
     ]));
-    view.appendChild(h(`<section class="steps3">${[1, 2, 3].map((n) => `<div><h3><span>${n}</span>${T("diem_step_" + n + "_h")}</h3><p>${T("diem_step_" + n)}</p></div>`).join("")}</section>`));
+    view.appendChild(h(`<div class="steps3">${[1, 2, 3].map((n) => `<div><h3><span>${n}</span>${T("diem_step_" + n + "_h")}</h3><p>${T("diem_step_" + n)}</p></div>`).join("")}</div>`));
     const DS = D.filter((r) => r.diem_price);
     const dAgg = { diem_price: "last", diem_credit_yield: "last", diem_mint_cost: "last", mint_rate: "last" };
     view.appendChild(grid(
@@ -808,23 +842,26 @@
       calcDiem()));
     const dist = V.diem_dist || [];
     const dEl = fig({ slug: "diem-holders", span: 12, title: T("diem_dist_t"), sub: `${W.takeaway.diem()} Staked DIEM is ${P.diem_staked} of ${P.diem_supply} outstanding (${P.diem_staked_share}); DIEM in pools and unstaked wallets is not in these bands.`, basis: "thirdparty", src: `venicestats bands of staked DIEM${V.diem_dist_utc ? ", " + timeUTC(V.diem_dist_utc).replace(/, \d+:\d+$/, "") : ""}`,
-      menu: [{ icon: "dl", label: "Download CSV", run: () => VC.download(`venice_staked_diem_bands_${AS_OF}.csv`, VC.toCSV(csvRows(dist))) }], body: '<div class="hb"></div>' });
+      menu: [{ icon: "dl", label: "Download CSV", run: () => VC.download(`venice_staked_diem_bands_${AS_OF}.csv`, VC.toCSV(csvRows(dist))) }],
+      // the bars and the band table side by side, one row per band in the same order (stacked on narrow screens)
+      body: `<div class="hb-pair"><div><div class="hb-h">Share of staked DIEM</div><div class="hb"></div></div><div class="tw"><table class="t hb-t"><thead><tr><th>Band</th><th class="r">Wallets</th><th class="r hide-sm">Share of wallets</th><th class="r">DIEM staked</th></tr></thead><tbody>${dist.slice().reverse().map((b) => `<tr><td>${b.range_label || b.bucket}</td><td class="r">${d3.format(",")(b.wallets)}</td><td class="r hide-sm">${pct(b.pctWallets / 100, 1)}</td><td class="r">${d3.format(",")(b.totalDiem)}</td></tr>`).join("")}</tbody></table></div></div>` });
     view.appendChild(grid(dEl));
-    if (dist.length) requestAnimationFrame(() => VC.hbars(dEl.querySelector(".hb"), { rows: dist.slice().reverse().map((b) => ({ label: `${b.range_label || b.bucket} (${d3.format(",")(b.wallets)} wallets)`, value: b.pctDiem / 100, color: "--c-diem", note: `${d3.format(",")(b.wallets)} wallets (${b.pctWallets}% of holders) hold ${d3.format(",")(b.totalDiem)} DIEM` })), fmt: (v) => pct(v, 1), labelW: 210, max: d3.max(dist, (b) => b.pctDiem / 100) }));
+    sections(view, [[null, 1], ["diem_price", 1], ["diem_hold", 2]]);
+    if (dist.length) requestAnimationFrame(() => VC.hbars(dEl.querySelector(".hb"), { rows: dist.slice().reverse().map((b) => ({ label: b.range_label || b.bucket, value: b.pctDiem / 100, color: "--c-diem", note: `${d3.format(",")(b.wallets)} wallets (${b.pctWallets}% of holders) hold ${d3.format(",")(b.totalDiem)} DIEM` })), fmt: (v) => pct(v, 1), labelW: 120, max: d3.max(dist, (b) => b.pctDiem / 100) }));
   };
 
   PAGES.valuation = (view) => {
     const lede = T("val_lede") + (K.mcap_to_burn > 30 ? ` Paying that much for a year of burns only makes sense if burns keep growing fast.` : "");
     view.appendChild(intro(`<p>${lede}</p>`, [
-      ["Market cap ÷ stated ARR", xx(K.mcap_to_arr), `Venice's ${ARR}, ${d3.utcFormat("%b %Y")(parse(K.disclosed_arr_date || AS_OF))}`],
-      ["FDV ÷ stated ARR", xx(K.fdv_to_arr), "Counting every VVV that exists"],
-      ["Market cap ÷ a year of burns", xx(K.mcap_to_burn, 0), "What holders receive"],
-      ["Break-even price", F.usd2(K.break_even_price), "Burns buy all new VVV at or below it"],
+      ["Market cap ÷ ARR", xx(K.mcap_to_arr), `Venice's stated ${ARR}, ${d3.utcFormat("%b %Y")(parse(K.disclosed_arr_date || AS_OF))}`],
+      ["FDV ÷ ARR", xx(K.fdv_to_arr), "Counting every VVV that exists"],
+      ["Market cap ÷ burns", xx(K.mcap_to_burn, 0), "A year of burns, what holders receive"],
+      ["Break-even price", F.usd2(K.break_even_price), "At or below this, today's burns buy all new VVV"],
     ]));
     const MB = D.filter((r) => r.mcap_to_burn != null);
     view.appendChild(grid(MB.length ? chartFig({ slug: "multiple", span: 7, title: T("val_mult_t"), sub: T("val_mult_s"), basis: "onchain", src: "Price from Allium, then CoinGecko; burns from Allium and Base", csvCols: ["mcap_to_burn", "mcap_circ", "burn_usd_yr"],
       time: { rows: MB, key: "d", def: "1Y", agg: { mcap_to_burn: "last", mcap_circ: "last", burn_usd_yr: "last" } } },
-      (r) => ({ data: r, height: 330, yMin: 0, endLabel: true, series: [{ key: "mcap_to_burn", label: "Market cap ÷ annual burns", color: "--c-lead", type: "line", fmt: (v) => xx(v, 0) },
+      (r) => ({ data: r, height: 340, yMin: 0, endLabel: true, series: [{ key: "mcap_to_burn", label: "Market cap ÷ annual burns", color: "--c-lead", type: "line", fmt: (v) => xx(v, 0) },
         { key: "burn_usd_yr", label: "Annual burns", color: "--c-burn", type: "line", noLegend: true, noLine: true, fmt: F.usd }], yFormat: (v) => v + "×" })) : null, scenarioFig()));
     view.appendChild(grid(peersFig()));
     const VS = D.filter((r) => r.dex_volume != null);
@@ -838,6 +875,7 @@
         time: { rows: VS, key: "d", def: "1Y", agg: { traders: "mean", trades: "sum" } } },
         (vs, g) => ({ data: vs, height: 220, yMin: 0, series: [{ key: "traders", label: g === "D" ? "Traders" : "Average daily traders", color: "--c-total", type: "line", fmt: F.int }], yFormat: F.num }))));
     view.appendChild(grid(caseFig()));
+    sections(view, [["val_burn", 1], [null, 1], ["val_trade", 1], [null, 1]]);
   };
   function scenarioFig() {
     const base = (K.burn_usd_yr || 0) / 12, em = (K.emission_yr || 0) / 12, price = K.price || 1;
@@ -895,22 +933,25 @@
 
   PAGES.method = (view) => {
     view.appendChild(intro(`<p>${T("met_lede")}</p>`));
-    const block = (title, body, cls = "") => `<section class="blk ${cls}"><h3>${title}</h3>${body}</section>`;
-    const table = (head, rows, rcols = []) => `<div class="tw"><table class="t"><thead><tr>${head.map((x, i) => `<th${rcols.includes(i) ? ' class="r"' : ""}>${x}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td${rcols.includes(i) ? ' class="r"' : ""}>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    // a documentation page: a sticky index on the left, one section per topic on the right, each with its own card
+    const DOC = [];
+    const block = (id, nav, title, lead, body, rail) => { DOC.push([id, nav, rail]); return `<section class="band" id="m-${id}" aria-labelledby="m-${id}-h"><header class="band-h"><h2 id="m-${id}-h">${title}</h2>${lead ? `<p>${lead}</p>` : ""}</header><div class="card doc-card">${body}</div></section>`; };
+    const table = (head, rows, rcols = [], cls = "", cols = "") => `<div class="tw"><table class="t ${cls}">${cols}<thead><tr>${head.map((x, i) => `<th${rcols.includes(i) ? ' class="r"' : ""}>${x}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td${rcols.includes(i) ? ' class="r"' : ""} data-l="${head[i]}">${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     const dl = (rows) => `<dl class="defs">${rows.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join("")}</dl>`;
-    const rowOf = (...blocks) => h(`<div class="blocks">${blocks.join("")}</div>`);
+    const parts = [];
+    const rowOf = (...blocks) => parts.push(...blocks);
     const chainBurns = META.chain && META.chain.burns && /chain/.test(META.burn_method || "");
     const nKnown = (V.disc_history || []).length + 2;
 
-    view.appendChild(rowOf(
-      block("What the labels under each chart mean", table(["Label", "Means", "Example"], [
+    (rowOf(
+      block("labels", "Labels", "What the labels under each chart mean", "Every chart's source line ends with one of these.", table(["Label", "Means", "Example"], [
         ["<b>On-chain</b>", "Computed from Base transactions", "Monthly burns, DIEM supply"],
         ["<b>Third-party classification</b>", "On-chain events sorted by someone else, here venicestats", "Subscriptions against API credits"],
         ["<b>Modeled</b>", "On-chain inputs run through a stated rule", "Implied API purchases"],
         ["<b>Reported by Venice</b>", "Venice said it and we can't check it", "$100M+ ARR, user count"],
         ["<b>Confidence</b>", "How far the number would move if an assumption were wrong", "High, medium"],
       ])),
-      block("Dates and coverage", dl([
+      block("dates", "Dates and coverage", "Dates and coverage", "Which day each figure is as of, and where each series comes from.", dl([
         ["Days", `UTC days. Every figure on the page is as of ${day(AS_OF)}, the last complete day.`],
         ["VVV price", `${PS.map((x) => `${day(x.from)} to ${day(x.to)}: ${x.definition}`).join("; ")}.${K.price_source ? " Headline: " + K.price_source + "." : ""}`],
         ["Allium data", `Allium's shared Venice queries. Market and DEX figures run through ${day(META.market_through || META.allium_full_through)}, the last complete Allium day; holders through ${day(K.holders_date || META.allium_snapshot)}.`],
@@ -919,15 +960,15 @@
         ["DEX volume", "Raw, before Allium's wash-trade flag is applied."],
       ]))));
 
-    view.appendChild(rowOf(
-      block("How burns are split by source", `<ol class="steps">
+    (rowOf(
+      block("split", "How burns are split", "How burns are split by source", "Five steps from the total VVV burned to subscriptions and API credits.", `<ol class="steps">
         <li>Start from the daily total of VVV burned (Allium${chainBurns ? ", then Base after Allium's last day" : ""}).</li>
         <li>Take out the ${nKnown} burns that aren't programmatic: the unclaimed-airdrop and team burns of Mar 12, 2025, and ${(V.disc_history || []).length} monthly buybacks from Venice's buyback Safe, each matched to its transaction.</li>
         <li>What's left is programmatic burning through the Aerodrome VVV/WETH pool, set off by subscriptions and API-credit purchases.</li>
         <li>Split that into subscriptions and API credits using venicestats' classification. On-chain the two look alike: same sender, same router, overlapping sizes.</li>
         <li>Implied API purchases are credit burns divided by ${pct(META.credit_burn_share)}, the share in Venice's post of Jul 17, 2026.</li></ol>
         <p class="note">The list of known burns comes from venicestats, so this split isn't independent of it. The total in step 1 is.</p>`),
-      block("Known limits", table(["Limit", "Effect", "Fix"], [
+      block("limits", "Known limits", "Known limits", "What the data cannot show yet, what that does to the numbers, and what would fix it.", table(["Limit", "Effect", "Fix"], [
         ["Subscription and credit burns look alike on-chain", "That split rests on venicestats", "Needs Venice to disclose it"],
         ["Burns valued at the day's median price", "Monthly totals within about 1%", "Price each swap"],
         ["DEX volume includes wash trades", "Volume reads high", "Apply Allium's wash-trade flag"],
@@ -938,21 +979,22 @@
     const rec = (V.reconcile || []).map((x) => [`<b>${x.metric}</b><div class="cell-note">${x.note}</div>`, x.allium != null ? C(x.allium, 2, true) : "–", x.chain != null ? C(x.chain, 2, true) : "–", x.venicestats != null ? C(x.venicestats, 2, true) : "–"]);
     const nInd = (V.reconcile || []).filter((x) => x.independent).length, nAll = (V.reconcile || []).length;
     const indS = (V.reconcile || []).some((x) => "independent" in x) ? `${nInd} of these ${nAll} figures have an independent second source; each note says whether its check is independent.` : "Each note says whether its check is independent.";
-    view.appendChild(rowOf(block("Checking the numbers", `<p class="note top">${indS}</p>${table(["Quantity", "Allium", "Our Base pull", "venicestats"], rec, [1, 2, 3])}`, "wide")));
+    (rowOf(block("checks", "Checking the numbers", "Checking the numbers", `Each figure from up to three sources. ${indS}`, table(["Quantity", "Allium", "Our Base pull", "venicestats"], rec, [1, 2, 3], "recon", '<colgroup><col><col class="n"><col class="n"><col class="n"></colgroup>'))));
 
-    view.appendChild(rowOf(block("Readings that depend on the denominator", `<p class="note top">The same data gives different headlines depending on what you divide by. Both columns are correct; they answer different questions.</p>${table(["Reading", "One way", "The other way"], [
-      ["Supply change since launch", `${pct(K.net_change_headline_pct, 1)} counting the March 2025 burns`, `${K.net_change_ex_oneoff_pct >= 0 ? "+" : ""}${pct(K.net_change_ex_oneoff_pct, 1)} leaving them out`],
+    (rowOf(block("denominator", "Denominators", "Readings that depend on the denominator", "The same data gives different headlines depending on what you divide by. Both columns are correct; they answer different questions.", `${table(["Reading", "One way", "The other way"], [
+      ["Supply change since launch", `<span class="${sgnCls(K.net_change_headline_pct)}">${K.net_change_headline_pct > 0 ? "+" : ""}${pct(K.net_change_headline_pct, 1)}</span> counting the March 2025 burns`, `<span class="${sgnCls(K.net_change_ex_oneoff_pct)}">${K.net_change_ex_oneoff_pct > 0 ? "+" : ""}${pct(K.net_change_ex_oneoff_pct, 1)}</span> leaving them out`],
       ["Staked share", `${pct(K.staked_pct_net, 1)} of net supply, which includes Venice's own ${vM(K.venice_vvv)} unstaked VVV`, `${pct(K.staking_ratio_circ, 1)} of circulating supply`],
-    ])}`, "wide")));
+    ])}`)));
 
-    view.appendChild(rowOf(
-      block("Downloads", table(["File", "What's in it"], [
+    (rowOf(
+      // two short sections side by side
+      `<div class="doc-pair">${block("downloads", "Downloads", "Downloads", "The data behind every chart, as a workbook or plain tables.", table(["File", "What's in it"], [
         [`<a href="downloads/venice-deep-dive-data.xlsx" download>Workbook (.xlsx)</a>`, "Daily and monthly tables, holders, supply buckets, burns, sources and a field dictionary"],
         [`<a href="downloads/venice_daily.csv" download>Daily table (.csv)</a>`, `${D.length} days from ${day(D[0] && D[0].d)} (contract deployment)`],
         [`<a href="downloads/venice_monthly.csv" download>Monthly table (.csv)</a>`, "One row a month"],
         ["Each chart", "Its own CSV and PNG, in the ⋯ menu at the top right of the card"],
-      ]) + `<h3 style="margin-top:24px">Contracts on Base</h3><div class="contracts">${Object.entries(META.contracts || {}).map(([k, a]) => `<div><b>${k}</b><a class="addr" href="https://basescan.org/token/${a}" target="_blank" rel="noopener">${a}</a>${copyBtn(a, k + " contract address")}</div>`).join("")}</div>`),
-      block("Sources", `<p class="note top">Built by Blockchain at Berkeley.</p>` + table(["Source", "Used for"], [
+      ], [], "files"), true)}${block("contracts", "Contracts", "Contracts on Base", "The three token contracts, each linked to Basescan.", `<div class="contracts">${Object.entries(META.contracts || {}).map(([k, a]) => `<div><b>${k}</b><a class="addr" href="https://basescan.org/token/${a}" target="_blank" rel="noopener">${a}</a>${copyBtn(a, k + " contract address")}</div>`).join("")}</div>`, true)}</div>`,
+      block("sources", "Sources", "Sources", "Built by Blockchain at Berkeley. Where each input comes from and what it is used for.", table(["Source", "Used for"], [
         ["Allium, Venice's shared queries", "Price, volume, traders, holders, mints and burns"],
         ["Base, through Envio HyperSync", chainBurns ? "sVVV and DIEM mints and burns, VVV burns after Allium's last day, Venice wallet flows" : "sVVV and DIEM mints and burns"],
         ["venicestats.com", "Subscription and credit classification, the known buyback and one-off burns, vesting, daily staking and DIEM figures"],
@@ -962,14 +1004,59 @@
         ["Reported figures", "ARR (Erik Voorhees, Aug 17, 2026), tokens a day (Venice's head of API, Oct 29, 2026), users (Bankless, Oct 28, 2026)"],
       ]))));
 
-    const sq = h(`<section class="blk wide"><h3>Allium SQL</h3><p class="note top">One query per metric, written for Allium's Base tables and checked against Allium's published schema. They have not been run inside Allium yet; the wallet-label query needs Allium's paid identity tables.</p><div class="sqll"></div></section>`);
-    (window.VENICE_SQL || []).forEach((x) => sq.querySelector(".sqll").appendChild(h(`<details class="sql"><summary>${esc(x.title.replace(/\s*\((chapter|Monitor|whale)[^)]*\)/g, ""))}<span>${esc(x.file.split("#").pop())}</span></summary><pre>${esc(x.sql)}</pre></details>`)));
-    const sqRow = h(`<div class="blocks"></div>`); sqRow.appendChild(sq); view.appendChild(sqRow);
+    rowOf(block("sql", "Allium SQL", "Allium SQL", "One query per metric, written for Allium's Base tables and checked against Allium's published schema. They have not been run inside Allium yet; the wallet-label query needs Allium's paid identity tables.", '<div class="sqll"></div>'));
+    const doc = h(`<div class="doc"><nav class="doc-ix" aria-label="On this page"><p>On this page</p><ol>${DOC.map(([id, nav, rail]) => `<li${rail ? " data-rail" : ""}><a href="#m-${id}" data-sec="m-${id}">${nav}</a></li>`).join("")}</ol></nav><div class="doc-body">${parts.join("")}</div><aside class="doc-rail" aria-label="Downloads and contracts"></aside></div>`);
+    // each query ends with a Copy SQL button at the bottom-left of its code block (the code keeps its long lines and
+    // scrolls sideways; the button stays put under it)
+    (window.VENICE_SQL || []).forEach((x) => {
+      const d = h(`<details class="sql"><summary>${esc(x.title.replace(/\s*\((chapter|Monitor|whale)[^)]*\)/g, ""))}<span>${esc(x.file.split("#").pop())}</span></summary><pre>${esc(x.sql)}</pre><div class="sql-f"><button type="button" class="tbtn sql-copy">${ICON.copy}<span>Copy SQL</span></button></div></details>`);
+      d.querySelector(".sql-copy").addEventListener("click", () => copyText(x.sql, "SQL copied"));
+      doc.querySelector(".sqll").appendChild(d);
+    });
+    view.appendChild(doc);
+    placeRail();
+    requestAnimationFrame(docIndex);
   };
+
+  /* ---------- Method index ----------
+     Links scroll to their section (the hash is kept in the URL with replaceState, so the tab's own history is not
+     touched); the section under the sticky tabs is marked as current. One scroll listener for the page's lifetime. */
+  function docIndex() {
+    const ix = document.querySelector(".doc-ix"); if (!ix) return;
+    ix.addEventListener("click", (e) => {
+      const a = e.target.closest("a[data-sec]"); if (!a) return;
+      e.preventDefault();
+      const el = document.getElementById(a.dataset.sec); if (!el) return;
+      el.scrollIntoView({ block: "start", behavior: REDUCE() ? "auto" : "smooth" });
+      history.replaceState(history.state, "", urlFor(tab) + "#" + a.dataset.sec);
+    });
+    markDoc();
+  }
+  // Method at ≥ 1500px: Downloads and Contracts move out of the main column into a sticky right rail (the third column
+  // documentation sites use), so the page has no empty band on the right; below that they sit side by side in the column
+  const RAIL = window.matchMedia("(min-width: 1500px)");
+  function placeRail() {
+    const rail = document.querySelector(".doc-rail"), pair = document.querySelector(".doc-pair"); if (!rail || !pair) return;
+    const secs = [document.getElementById("m-downloads"), document.getElementById("m-contracts")].filter(Boolean);
+    secs.forEach((s) => (RAIL.matches ? rail : pair).appendChild(s));
+    markDoc();
+  }
+  RAIL.addEventListener("change", placeRail);
+  function markDoc() {
+    const ix = document.querySelector(".doc-ix"); if (!ix) return;
+    const line = $("#tabs").getBoundingClientRect().bottom + 24;
+    let cur = null;
+    const links = [...ix.querySelectorAll("a[data-sec]")].filter((a) => a.offsetParent);   // rail sections drop out of the index
+    links.forEach((a) => { const el = document.getElementById(a.dataset.sec); if (el && el.getBoundingClientRect().top <= line) cur = a; });
+    if (!cur) cur = links[0];
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) cur = links[links.length - 1];
+    ix.querySelectorAll("a[data-sec]").forEach((a) => (a === cur ? a.setAttribute("aria-current", "true") : a.removeAttribute("aria-current")));
+  }
+  window.addEventListener("scroll", () => { if (tab === "method") markDoc(); }, { passive: true });
 
   /* ---------- flow diagram ----------
      Two groups split by a vertical line: off-chain (users and Venice, in dollars) and on Base (everything VVV).
-     Boxes are coloured by kind: money grey, VVV blue-grey, DIEM blue, burned orange. Below 700px it stacks. */
+     Boxes are coloured by kind: money grey, VVV blue-grey, DIEM blue, burned orange. Below a 960px card it stacks. */
   function drawFlow(el) {
     el.innerHTML = "";
     const css = VC.css, mix = (a, b, t) => d3.interpolateRgb(css(a), css(b))(t);
@@ -984,7 +1071,9 @@
       svvv: { k: "vvv", t: "Staked VVV (sVVV)", d: `${vM(K.staked)}, ${ok(K.staker_apr) ? K.staker_apr.toFixed(1) + "% a year" : ""}` },
       diem: { k: "diem", t: "DIEM", d: `${C(K.diem_supply)} outstanding` },
     };
-    const narrow = el.clientWidth < 700;
+    // the side-by-side layout needs about 1000px for its edge labels to clear the boxes (12px type does not scale); below
+    // ~960px the boxes stack
+    const narrow = el.clientWidth < 960;
     const svg = d3.select(el).append("svg").attr("role", "img").attr("aria-label", "How money moves between users, Venice, VVV, sVVV and DIEM");
     const defs = svg.append("defs");
     defs.append("marker").attr("id", "ar").attr("viewBox", "0 0 10 10").attr("refX", 9).attr("refY", 5).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto-start-reverse").append("path").attr("d", "M0,0 L10,5 L0,10 z").attr("fill", css("--fg-2"));
@@ -992,8 +1081,16 @@
       b.x = x; b.y = y; b.w = w; b.h = hgt;
       const s = boxStyle(b.k), g = svg.append("g").attr("class", "dg-box");
       g.append("rect").attr("x", x).attr("y", y).attr("width", w).attr("height", hgt).attr("rx", 6).attr("fill", s.fill).attr("stroke", s.stroke);
-      g.append("text").attr("class", "t").attr("x", x + w / 2).attr("y", y + hgt / 2 - 3).attr("text-anchor", "middle").text(b.t);
-      g.append("text").attr("class", "d").attr("x", x + w / 2).attr("y", y + hgt / 2 + 14).attr("text-anchor", "middle").text(b.d);
+      const tt = g.append("text").attr("class", "t").attr("x", x + w / 2).attr("y", y + hgt / 2 - 3).attr("text-anchor", "middle").text(b.t);
+      const dt = g.append("text").attr("class", "d").attr("x", x + w / 2).attr("y", y + hgt / 2 + 14).attr("text-anchor", "middle").text(b.d);
+      // a description wider than its box breaks after its comma onto a second line, so it never runs into an edge label
+      const cut = b.d.indexOf(", ");
+      if (cut > 0 && dt.node().getComputedTextLength() > w - 16 && hgt >= 60) {
+        tt.attr("y", y + hgt / 2 - 10);
+        dt.text(null).attr("y", y + hgt / 2 + 7);
+        dt.append("tspan").attr("x", x + w / 2).text(b.d.slice(0, cut + 1));
+        dt.append("tspan").attr("x", x + w / 2).attr("dy", 15).text(b.d.slice(cut + 2));
+      }
     };
     const edge = (pts, label, lx, ly, anchor = "middle") => {
       const g = svg.append("g").attr("class", "dg-edge");
@@ -1009,7 +1106,7 @@
     };
     if (!narrow) {
       // laid out on a 1000-wide grid and stretched to the card, so type stays at its set size
-      const Wd = el.clientWidth, sx = Wd / 1000, X = (v) => v * sx, H = 330, bw = X(186), bh = 64, r1 = 44, r2 = 226;
+      const Wd = el.clientWidth, sx = Wd / 1000, X = (v) => v * sx, H = 330, bw = X(178), bh = 64, r1 = 44, r2 = 226;
       svg.attr("viewBox", `0 0 ${Wd} ${H}`).attr("height", H);
       const cx = { off: X(20), c1: X(290), c2: X(548), c3: X(794) };
       svg.append("line").attr("x1", X(240)).attr("x2", X(240)).attr("y1", 8).attr("y2", H - 8).attr("stroke", css("--line-strong")).attr("stroke-dasharray", "3 4");
