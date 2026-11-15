@@ -71,6 +71,20 @@
     return i;
   }
   // Legend items are buttons: a click hides or shows that series. The last visible series cannot be hidden.
+  // the order a reader sees stacked layers in, top first: d3's diverging stack puts positive layers upward in key order
+  // and negative layers downward in key order, so positives reverse and negatives keep their order
+  function visualStackOrder(series, rows) {
+    const groups = {};
+    series.forEach((s) => { if (s.stack && !s.noLine) (groups[s.stack] = groups[s.stack] || []).push(s); });
+    const out = series.slice();
+    Object.values(groups).forEach((ss) => {
+      const sign = (s) => d3.sum(rows || [], (r) => r[s.key] || 0) >= 0;
+      const ordered = ss.filter(sign).reverse().concat(ss.filter((s) => !sign(s)));
+      const slots = ss.map((s) => out.indexOf(s)).sort((a, b) => a - b);
+      slots.forEach((slot, i) => (out[slot] = ordered[i]));
+    });
+    return out;
+  }
   function legend(series, hidden, onToggle, extra) {
     const L = document.createElement("div"); L.className = "legend";
     const shown = series.filter((s) => !s.noLegend);
@@ -247,7 +261,7 @@
             if (part) anyPart = true;
             const y0 = Y(Math.max(p.a, p.b)), hh = Math.abs(Y(p.a) - Y(p.b));
             if (hh <= 0) return;
-            gPlot.append("rect").attr("x", g.x).attr("width", g.w).attr("y", y0).attr("height", hh)
+            gPlot.append("rect").attr("data-s", s.label).attr("x", g.x).attr("width", g.w).attr("y", y0).attr("height", hh)
               .attr("fill", part ? (s.hatch ? fill : c) : fill).attr("fill-opacity", part ? 0.38 : 1)
               .attr("stroke", part ? c : stacked[s.key] && g.w >= 4 ? card : null).attr("stroke-width", part ? 1 : stacked[s.key] && g.w >= 4 ? 1 : null)
               .attr("stroke-dasharray", part ? "3 2" : null);
@@ -307,7 +321,15 @@
           const v = stacked[s.key] ? stacked[s.key][i][1] : r[s.key];
           dots[k].attr("cx", px).attr("cy", v == null ? -99 : yOf(s)(v)).style("display", v == null ? "none" : null);
         });
-        const rows = all.filter((s) => !s.noTip && !st.hidden.has(s.key)).map((s) => {
+        const at = (s) => {
+          if (s.noLine) return Infinity;
+          if (stacked[s.key]) { const p = stacked[s.key][i]; return yOf(s)((p[0] + p[1]) / 2); }
+          const v = r[s.key];
+          if (v == null) return Infinity;
+          return s.type === "bar" ? yOf(s)(v / 2) : yOf(s)(v);
+        };
+        const tipSeries = all.filter((s) => !s.noTip && !st.hidden.has(s.key)).map((s, k) => ({ s, k, y: at(s) })).sort((a, b) => a.y - b.y || a.k - b.k).map((o) => o.s);
+        const rows = tipSeries.map((s) => {
           const v = r[s.key], f = s.axis === "y2" ? y2F : yF;
           return `<div class="tr"><i style="background:${color(s.color)}"></i><span>${s.label}</span><b>${s.fmt ? s.fmt(v) : (cfg.tipFormat || f)(v)}</b></div>`;
         });
@@ -336,7 +358,7 @@
       const shownSeries = all.filter((s) => !s.noLegend);
       if (shownSeries.length > 1 || cfg.legend || anyPart) {
         const extra = anyPart ? [{ cls: "part", color: css("--faint"), label: cfg.partLabel || "In progress" }] : [];
-        el.appendChild(legend(all, st.hidden, shownSeries.length > 1 ? (k) => { st.hidden.has(k) ? st.hidden.delete(k) : st.hidden.add(k); if (cfg.onHidden) cfg.onHidden(new Set(st.hidden)); draw(false); } : null, extra));
+        el.appendChild(legend(visualStackOrder(all, cfg.data), st.hidden, shownSeries.length > 1 ? (k) => { st.hidden.has(k) ? st.hidden.delete(k) : st.hidden.add(k); if (cfg.onHidden) cfg.onHidden(new Set(st.hidden)); draw(false); } : null, extra));
       }
       if (animate) { if (gEv) gEv.raise(); wipe(el, svg, gPlot, M.l - 4, W - M.l - M.r + 8, H); if (gEv) { gEv.style("opacity", 0).transition().delay(450).duration(250).style("opacity", 1); } }
     };
@@ -657,7 +679,7 @@
     }
     meas.font = "500 12px Manrope";
     const evRows = Math.ceil(evs.length / 2), legH = leg.length ? 26 : 0, evH = evs.length ? evRows * 18 + 8 : 0;
-    meas.font = "400 12px Manrope"; const srcL = wrapText(meas, (src ? "Source: " + src.replace(/\.?\s*$/, ". ") : "") + "Blockchain at Berkeley.", Wd - pad * 2);
+    const SRC_FONT = "italic 400 11.5px Manrope"; meas.font = SRC_FONT; const srcL = wrapText(meas, (src ? "Source: " + src.replace(/\.?\s*$/, ". ") : "") + "Blockchain at Berkeley.", Wd - pad * 2);
     const H = pad + tl.length * 24 + sl.length * 20 + (meta ? 20 : 0) + 12 + d3.sum(parts, (p) => p.h + 8) + legH + evH + srcL.length * 17 + 24;
     const cv = document.createElement("canvas"); cv.width = Wd * S; cv.height = H * S;
     const ctx = cv.getContext("2d"); ctx.scale(S, S);
@@ -688,9 +710,9 @@
       });
       yy += evH;
     }
-    ctx.fillStyle = css("--muted"); ctx.font = "400 11.5px Manrope";
+    ctx.fillStyle = css("--muted"); ctx.font = SRC_FONT;
     srcL.forEach((l) => { ctx.fillText(l, pad, yy + 14); yy += 17; });
-    window.__lastExport = { title, sub, meta, src, events: evs.map((e) => e.n + " " + e.t), legend: leg.map((l) => ({ label: l.t, dashed: l.dashed })), name };
+    window.__lastExport = { title, sub, meta, src, srcFont: SRC_FONT, events: evs.map((e) => e.n + " " + e.t), legend: leg.map((l) => ({ label: l.t, dashed: l.dashed })), name };
     cv.toBlob((b) => download(name, b, "image/png"), "image/png");
   }
 
