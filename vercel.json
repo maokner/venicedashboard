@@ -3,7 +3,16 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "redirects": [
-    { "source": "/deep-dive", "destination": "/deep-dive/", "permanent": false }
+    {
+      "source": "/deep-dive",
+      "destination": "/deep-dive/",
+      "permanent": false
+    },
+    {
+      "source": "/deep-dive-versions",
+      "destination": "/deep-dive-versions/",
+      "permanent": false
+    }
   ],
   "headers": [
     {
